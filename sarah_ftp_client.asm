@@ -1,3 +1,18 @@
+; --- DOKUMENTACE CZ: konvence ---
+; Hlavicky popisuji vstupni body rutin, nikoli vnitrni smycky a data.
+; IX obvykle ukazuje na flag1. Meni = registry, jejichz puvodni hodnotu
+; volajici nema predpokladat; u rozvetvenych rutin jde o konzervativni
+; sjednoceni moznych vetvi. Zachovani je garantovano jen tam, kde je uvedeno.
+; AF zahrnuje akumulator i priznaky. C/NC a Z/NZ oznacuji priznaky,
+; neni-li vyslovne uveden registr C. Apostrof oznacuje alternativni sadu.
+; Zmena (IX+n) meni pamet, nikoli samotny registr IX.
+; Externi BIOS/ROM/DOS a tiskove sluzby mohou mit dalsi vedlejsi ucinky:
+; kde jsou uvedeny odkazem, hlavicka negarantuje jejich ostatni registry.
+; U beznych CALL/RET se SP docasne meni a pri radnem navratu obnovuje.
+; Obsluha chyb a ukonceni mohou zasobnik prepnout a opustit volajiciho.
+; Pri rozporu s historickymi komentari hlavicky popisuji skutecny kod.
+; --- KONEC DOKUMENTACE CZ ---
+
 ;jako 1.2, ale pridavame HGFX 512x192, vydavam jen pro BSDOS. Dalsi verze budou muset byt pro 128K, protoze uz neni misto.
 
 ;kde se co maze pomoci HL?
@@ -866,6 +881,13 @@ kl9		xor	a			;A=0 to return to key_loop
 ;internal subroutines: switch_speed, print_bauds, find_out_speed
 ;external subroutines: send_at:check_ok, set_ud_speed, set_print_speed, print_speed
 
+; --- DOKUMENTACE CZ: speed_management ---
+; Ucel: Sjednotí rychlost komunikace UART a Wi-Fi při inicializaci.
+; Vstup: Inicializovaný BIOS a příznaky na IX.
+; Vystup: Připravená komunikace nebo obsluha chyby.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Pracuje s konfigurací rychlosti, příjmovým bufferem a stavovým výpisem.
+; --- KONEC DOKUMENTACE CZ ---
 speed_management
 		ld	(ix+7),#FF		;reset currently set speed status
 		res	6,(ix+0)		;set signal UART and module speed not aligned
@@ -949,6 +971,14 @@ wifi_cont					;we are at speed we want. Final steps... print UART speed+ Baud sp
 ;		ret		
 
 ;SM2.0 subroutines
+; --- DOKUMENTACE CZ: find_out_speed ---
+; Ucel: Zjistí index aktuální rychlosti UART, případně rychlosti vyzkouší.
+; Vstup: IX = flag1; dostupné služby get_baud/set_baud.
+; Vystup: D = index zjištěné rychlosti při úspěchu.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Při nepodporovaném get_baud používá switch_speed; jeho neúspěch nepovažujte za
+;   platnou rychlost.
+; --- KONEC DOKUMENTACE CZ ---
 find_out_speed					;subroutine is able to find out current speed for all MBFW, output in D
 		call	get_baud		;we are at aligned speed, is the one we want?
 		jr	nc,fos1			;C=speed reading not supported by given MBFW
@@ -962,6 +992,13 @@ fos1		ld	d,a			;D=curently aligned speed
 ;		call	sws2
 ;		ret	z			;Z= speed <0,7> found
 
+; --- DOKUMENTACE CZ: switch_speed ---
+; Ucel: Zkouší rychlosti UART sestupně od maximální až po nulu.
+; Vstup: (IX+8) = nejvyšší zkoušený index rychlosti.
+; Vystup: Z = modul odpověděl OK, D = nalezený index; NZ = nenalezeno.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Mění UART a (IX+6), vyprazdňuje příjem.
+; --- KONEC DOKUMENTACE CZ ---
 switch_speed	ld	a,(ix+8)		;try out every speed if you find connection UART+Wifi
 						;start with max speed, end with 0
 sws2		push	af
@@ -986,6 +1023,12 @@ sws1		call	send_at_check_ok
 		dec	a			;NZ=not successfull
 		ret
 
+; --- DOKUMENTACE CZ: print_bauds ---
+; Ucel: Rezervovaný vstup pro výpis rychlosti v baudech.
+; Vstup: Žádný.
+; Vystup: Okamžitý návrat; aktivní implementace je pouze RET.
+; Meni: Žádné.
+; --- KONEC DOKUMENTACE CZ ---
 print_bauds	ret
 /*
 print_bauds	call	get_baud		;print speed in Bauds...solved in bios 1.8
@@ -1041,6 +1084,13 @@ prbloop		ld	(de),a
 ;save application with its settings
 
 
+; --- DOKUMENTACE CZ: save_app ---
+; Ucel: Uloží aplikaci včetně aktuálního nastavení.
+; Vstup: Aktuální program a save_app_head.
+; Vystup: Uložený obraz aplikace; závěr obnovuje IX=flag1.
+; Meni: AF, BC, DE, HL, IX; IY a alternativní registry dle ROM/DOS.
+; Poznamka: Volá ROM ukládání; ESXDOS varianta využívá tapeout a mění systémové proměnné.
+; --- KONEC DOKUMENTACE CZ ---
 save_app	
 ;	IF bs_dos=0
 	IFNDEF bs_dos
@@ -1105,6 +1155,12 @@ save_app	ld	hl,zxftpcl
 		jp	save_close
 */
 ;change URL
+; --- DOKUMENTACE CZ: change_host ---
+; Ucel: Načte novou adresu FTP serveru.
+; Vstup: IX = flag1.
+; Vystup: Nový nulou ukončený host_url a aktualizovaný výpis.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 change_host	ld	de,enter_url
 		call	print_ez1
 
@@ -1119,6 +1175,14 @@ change_host	ld	de,enter_url
 
 
 ;upload file
+; --- DOKUMENTACE CZ: ftp_upload_file ---
+; Ucel: Nahraje lokální soubor na FTP server.
+; Vstup: Přihlášené FTP spojení; soubor zadaný uživatelem.
+; Vystup: Dokončený/zrušený/chybný upload, stav v transfer_flag.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb. Diskové
+;   služby mohou používat IX/IY a alternativní sadu.
+; Poznamka: Řeší existující soubor, datové spojení, čtení disku a průběh přenosu.
+; --- KONEC DOKUMENTACE CZ ---
 ftp_upload_file	bit	5,(ix+0)
 		ret	z			;if no connection, return
 
@@ -1344,6 +1408,13 @@ ftp_send_lastc	add	hl,bc
 		ld	b,h
 		ld	c,l
 
+; --- DOKUMENTACE CZ: ftp_upl_send ---
+; Ucel: Odešle jeden připravený blok uploadu a vyhodnotí odpověď modulu.
+; Vstup: BC = délka bloku; data a adresy připravené uploadovou smyčkou.
+; Vystup: Odeslaný blok nebo obsluha chyby.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Ukládá délku do ftp_upl_len.
+; --- KONEC DOKUMENTACE CZ ---
 ftp_upl_send	ld	(ftp_upl_len),bc
 		push	bc
 		call	cipsend_lod		;send AT+CIPSEND=1,length_of_data
@@ -1586,6 +1657,12 @@ ftp_upl_start	dw	#5555
 
 
 ;log off ftp
+; --- DOKUMENTACE CZ: ftp_quit_connection ---
+; Ucel: Ukončí relaci FTP příkazem QUIT.
+; Vstup: Příznaky spojení na IX.
+; Vystup: Ukončená relace a aktualizovaný stav.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 ftp_quit_connection
 		bit	5,(ix+0)
 		ret	z			;if no connection, return
@@ -1609,15 +1686,39 @@ ftp_quit_connection
 
 		
 
+; --- DOKUMENTACE CZ: ftp_download_file_var ---
+; Ucel: Spustí download výchozího, zadaného nebo vybraného/označeného souboru.
+; Vstup: var_name / uživatelský vstup / aktuální adresář; FTP spojení.
+; Vystup: Stažené soubory nebo stav chyby/zrušení.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb. IX/IY a
+;   alternativní registry dle diskových a přenosových rutin.
+; Poznamka: Mění přenosové buffery, diskový stav a transfer_flag.
+; --- KONEC DOKUMENTACE CZ ---
 ftp_download_file_var
 		call	send_type_command_i	;switch to TYPE I (binary)
 		call	ftp_download_file_var1
 		jr	tn2
+; --- DOKUMENTACE CZ: ftp_download_file_new ---
+; Ucel: Spustí download výchozího, zadaného nebo vybraného/označeného souboru.
+; Vstup: var_name / uživatelský vstup / aktuální adresář; FTP spojení.
+; Vystup: Stažené soubory nebo stav chyby/zrušení.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb. IX/IY a
+;   alternativní registry dle diskových a přenosových rutin.
+; Poznamka: Mění přenosové buffery, diskový stav a transfer_flag.
+; --- KONEC DOKUMENTACE CZ ---
 ftp_download_file_new
 		call	send_type_command_i	;switch to TYPE I (binary)
 		call	ftp_download_file_new1
 		jr	tn2
 ;priprava na hromadný download souboru
+; --- DOKUMENTACE CZ: ftp_download_file_dir ---
+; Ucel: Spustí download výchozího, zadaného nebo vybraného/označeného souboru.
+; Vstup: var_name / uživatelský vstup / aktuální adresář; FTP spojení.
+; Vystup: Stažené soubory nebo stav chyby/zrušení.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb. IX/IY a
+;   alternativní registry dle diskových a přenosových rutin.
+; Poznamka: Mění přenosové buffery, diskový stav a transfer_flag.
+; --- KONEC DOKUMENTACE CZ ---
 ftp_download_file_dir
 		bit	5,(ix+0)
 		ret	z			;if no connection, return
@@ -2183,6 +2284,12 @@ buff_add_float	dw	#5555			;in bytes, moving address throughout the buffer, where
 ;portion_len=rest_buf_len	ji máme v disk operations
 
 ;enter any command to ftp server
+; --- DOKUMENTACE CZ: enter_command ---
+; Ucel: Umožní zadat a odeslat vlastní FTP příkaz.
+; Vstup: FTP spojení; IX = flag1.
+; Vystup: Odeslaný uživatelský příkaz a zobrazená odpověď.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 enter_command
 		ld	de,enter_comm
 		call	print_ez1
@@ -2206,6 +2313,12 @@ enter_command
 
 		
 ;rename item/file
+; --- DOKUMENTACE CZ: rename_item_file ---
+; Ucel: Přejmenuje vybranou položku pomocí RNFR a RNTO.
+; Vstup: Aktuální položka adresáře; nový název od uživatele.
+; Vystup: Změněný název na serveru, případně chybové hlášení.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 rename_item_file
 		scf
 		call	get_item_name
@@ -2240,6 +2353,12 @@ rename_item_file
 
 
 ;find out file size
+; --- DOKUMENTACE CZ: ftp_file_size ---
+; Ucel: Vyžádá velikost souboru pomocí FTP SIZE.
+; Vstup: Připojený klient; název podle uživatelského vstupu.
+; Vystup: Zpracovaná velikost nebo chybové hlášení.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 ftp_file_size	bit	5,(ix+0)
 		ret	z			;if no connection, return
 
@@ -2281,6 +2400,13 @@ ffc1		ld	hl,exp_name
 
 
 ;delete item/file
+; --- DOKUMENTACE CZ: delete_item_file ---
+; Ucel: Smaže vybranou položku nebo označené položky po potvrzení.
+; Vstup: Aktuální adresář a mark_counter.
+; Vystup: Položky odstraněny ze serveru a seznam aktualizován.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb. AF' při volbě
+;   mazacího příkazu.
+; --- KONEC DOKUMENTACE CZ ---
 delete_item_file
 		ld	de,yesno
 		call	print_ez1
@@ -2382,6 +2508,12 @@ remove2		ex	af,af'
 
 
 ;enter new directory
+; --- DOKUMENTACE CZ: create_dir ---
+; Ucel: Vyžádá jméno a vytvoří vzdálený adresář příkazem MKD.
+; Vstup: FTP spojení; IX = flag1.
+; Vystup: Nový adresář na serveru a obnovený seznam.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 create_dir	ld	de,enter_dir
 		call	print_ez1
 
@@ -2398,6 +2530,13 @@ cd1;		call	undraw_cursor
 
 
 ;automatic login to FTP server. If connection exists, it will ask if should be kept or proceed to new one.
+; --- DOKUMENTACE CZ: auto_login ---
+; Ucel: Přihlásí klienta k serveru automaticky / s uživatelským zadáním.
+; Vstup: host_url, var_user, var_pasw a IX = flag1.
+; Vystup: Aktualizovaný stav přihlášení a zobrazení.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Odesílá USER/PASS; může uzavřít předchozí spojení.
+; --- KONEC DOKUMENTACE CZ ---
 auto_login	call	get_status_ftp		;find out if already connected to ftp server
 		jr	nz,al1			;NZ= proceed to login
 
@@ -2443,6 +2582,13 @@ al_user_pass	call	clear_inp_buf
 
 ;login to ftp server. 1. make TCP connection at port 21, 2. input user+ password
 ;manual login
+; --- DOKUMENTACE CZ: ftp_login ---
+; Ucel: Přihlásí klienta k serveru automaticky / s uživatelským zadáním.
+; Vstup: host_url, var_user, var_pasw a IX = flag1.
+; Vystup: Aktualizovaný stav přihlášení a zobrazení.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Odesílá USER/PASS; může uzavřít předchozí spojení.
+; --- KONEC DOKUMENTACE CZ ---
 ftp_login	call	get_status_ftp		;find out if already connected to ftp server
 		jr	nz,fl5			;NZ= proceed to login
 
@@ -2504,6 +2650,13 @@ fl3		call	clear_edit_zone
 ; which preserves AF/BC/DE/IX/IY exactly.
 ; -----------------------------------------------------------------------------
 
+; --- DOKUMENTACE CZ: DIR128_MAP_CURRENT ---
+; Ucel: Namapuje aktuální banku adresáře do #C000–#FFFF.
+; Vstup: fdp_pointer ukazuje do tabulky ftp_dir_page.
+; Vystup: NC = platná banka, C = sentinel #FF.
+; Meni: AF; BC, DE, HL, IX a IY zachovány.
+; Poznamka: Mění PAGE128_STATE a port #7FFD.
+; --- KONEC DOKUMENTACE CZ ---
 DIR128_MAP_CURRENT:
         push    hl
         push    de
@@ -2523,6 +2676,13 @@ DIR128_MAP_BAD:
         ret
 
 ;Select first FTP directory page (page 0).
+; --- DOKUMENTACE CZ: DIR128_FIRST_PAGE ---
+; Ucel: Vybere první banku adresáře (RAM 0).
+; Vstup: Bez parametrů.
+; Vystup: fdp_pointer = ftp_dir_page+1; NC.
+; Meni: AF; BC, DE, HL, IX a IY zachovány.
+; Poznamka: Mění mapování RAM a PAGE128_STATE.
+; --- KONEC DOKUMENTACE CZ ---
 DIR128_FIRST_PAGE:
         push    hl
         ld      hl,ftp_dir_page+1       ;first real entry = page 0
@@ -2535,6 +2695,13 @@ DIR128_FIRST_PAGE:
 
 ;HL++ across #FFFF -> #C000 of the next directory page.
 ;IMPORTANT: A is preserved. OUT: NC=OK, C=end of directory RAM.
+; --- DOKUMENTACE CZ: DIR128_INC_HL ---
+; Ucel: Posune adresu o bajt vpřed, případně přepne na další banku.
+; Vstup: HL = adresa ve stránkovaném okně; fdp_pointer = aktuální banka.
+; Vystup: NC = posun proveden; C = konec RAM, HL zůstane #FFFF.
+; Meni: F, HL; A, BC, DE, IX a IY zachovány.
+; Poznamka: Při překročení hranice mění fdp_pointer a mapování RAM.
+; --- KONEC DOKUMENTACE CZ ---
 DIR128_INC_HL:
         push    af                      ;old INC HL never changed A - preserve it here too
         inc     hl
@@ -2574,6 +2741,13 @@ DIR128_INC_END:
 ;Only HL / mapped page may change. End-of-64K status is returned in memory.
 ;  dir128_parser_status = 0  OK
 ;  dir128_parser_status = 1  no next directory page
+; --- DOKUMENTACE CZ: DIR128_INC_HL_PARSER ---
+; Ucel: Posune ukazatel přijímacího parseru bez změny příznaků CPU.
+; Vstup: HL = adresa v aktuální bance adresáře.
+; Vystup: dir128_parser_status = 0 při úspěchu, 1 na konci RAM.
+; Meni: Pouze HL; AF, BC, DE, IX a IY zachovány.
+; Poznamka: Může změnit fdp_pointer, PAGE128_STATE a mapování RAM.
+; --- KONEC DOKUMENTACE CZ ---
 DIR128_INC_HL_PARSER:
         push    af
         push    de
@@ -2607,6 +2781,13 @@ DIR128_INC_HL_PARSER:
 
 ;HL-- across #C000 -> #FFFF of the previous directory page.
 ;IMPORTANT: A is preserved. OUT: NC=OK, C=start of directory RAM.
+; --- DOKUMENTACE CZ: DIR128_DEC_HL ---
+; Ucel: Posune adresu o bajt zpět, případně přepne na předchozí banku.
+; Vstup: HL = adresa ve stránkovaném okně; fdp_pointer = aktuální banka.
+; Vystup: NC = posun proveden; C = začátek RAM, HL zůstane #C000.
+; Meni: F, HL; A, BC, DE, IX a IY zachovány.
+; Poznamka: Při překročení hranice mění fdp_pointer a mapování RAM.
+; --- KONEC DOKUMENTACE CZ ---
 DIR128_DEC_HL:
         push    af                      ;old DEC HL never changed A - preserve it here too
         dec     hl
@@ -2642,6 +2823,13 @@ DIR128_DEC_START:
 
 ;Map page-table pointer stored in DE. HL is preserved.
 ;IN: DE = pointer to one of the real entries in ftp_dir_page.
+; --- DOKUMENTACE CZ: DIR128_MAP_DE ---
+; Ucel: Namapuje banku určenou ukazatelem do tabulky.
+; Vstup: DE = adresa platné položky ftp_dir_page (nikoli číslo banky).
+; Vystup: fdp_pointer = DE; příslušná banka je dostupná v #C000–#FFFF.
+; Meni: Žádné z AF, BC, DE, HL, IX, IY.
+; Poznamka: Neověřuje sentinel; mění mapování RAM a PAGE128_STATE.
+; --- KONEC DOKUMENTACE CZ ---
 DIR128_MAP_DE:
         push    af
         ld      (fdp_pointer),de
@@ -2661,6 +2849,13 @@ DIR128_MAP_DE:
 ; OUT: DE points behind copied bytes, BC=0
 ; The source may cross any #FFFF -> #C000 directory-page boundary.
 ; -----------------------------------------------------------------------------
+; --- DOKUMENTACE CZ: DIR128_COPY_NAME_TO_DE ---
+; Ucel: Zkopíruje jméno ze stránkovaného adresáře do pevné RAM.
+; Vstup: HL = zdroj, BC = délka, DE = cíl; item_name_page = banka zdroje.
+; Vystup: BC = 0, DE za kopií; C při nedostatku bank před koncem kopie.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: Nepřidává nulový terminátor. Mění cílovou paměť a mapování RAM.
+; --- KONEC DOKUMENTACE CZ ---
 DIR128_COPY_NAME_TO_DE:
         push    de
         ld      de,(item_name_page)
@@ -2693,6 +2888,14 @@ DIR128_COPY_NAME_TO_DE:
 ; Two or more characters use normal case-insensitive substring search. There is
 ; no 255-byte directory-name limit; directory page crossings are transparent.
 ; -----------------------------------------------------------------------------
+; --- DOKUMENTACE CZ: search_by_Busy_dir ---
+; Ucel: Vyhledá vzor ve jménu; zvolí rychlou nebo stránkovanou variantu.
+; Vstup: HL = jméno, BC = délka, item_name_page = banka; INPBUFF = malá písmena vzoru, txtlen+1
+;   = délka vzoru.
+; Vystup: Z = shoda, NZ = nenalezeno.
+; Meni: AF, BC, DE, HL, BC'; IX a IY zachovány.
+; Poznamka: Jednoznakový vzor porovnává jen začátek jména; může změnit mapování RAM.
+; --- KONEC DOKUMENTACE CZ ---
 search_by_Busy_dir:
         ; Empty name cannot contain a non-empty search pattern.
         ld      a,b
@@ -2761,6 +2964,14 @@ search_by_Busy_dir:
 ; restored to the exact candidate start and advanced by ONE byte.  Overlapping
 ; matches therefore cannot be skipped.
 ; -----------------------------------------------------------------------------
+; --- DOKUMENTACE CZ: search_by_Busy_fast ---
+; Ucel: Vyhledá podřetězec bez rozlišení velikosti písmen v jedné bance.
+; Vstup: HL = jméno, BC = délka; INPBUFF = vzor převedený na malá písmena, txtlen+1 = jeho
+;   délka.
+; Vystup: Z = shoda, NZ = nenalezeno.
+; Meni: AF, BC, DE, HL, BC'; IX a IY zachovány.
+; Poznamka: Celé jméno musí ležet v aktuálně namapované bance.
+; --- KONEC DOKUMENTACE CZ ---
 search_by_Busy_fast:
         ex      de,hl                   ;DE=current candidate in file name
 
@@ -2826,6 +3037,14 @@ search_by_Busy_fast:
 ; first character.  This slow path therefore normally handles 2+ character
 ; substring searches whose source name crosses a directory-bank boundary.
 ; -----------------------------------------------------------------------------
+; --- DOKUMENTACE CZ: search_by_Busy_dir_slow ---
+; Ucel: Vyhledá podřetězec i přes hranice bank adresáře.
+; Vstup: HL = jméno, BC = délka, item_name_page = banka; INPBUFF a txtlen+1 = normalizovaný vzor
+;   a délka.
+; Vystup: Z = shoda, NZ = nenalezeno.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: Používá pracovní proměnné dir_search_* a mění mapování RAM.
+; --- KONEC DOKUMENTACE CZ ---
 search_by_Busy_dir_slow:
         ld      (dir_search_addr),hl
         ld      (dir_search_remaining),bc
@@ -2894,6 +3113,14 @@ search_by_Busy_dir_slow:
         ret
 
 
+; --- DOKUMENTACE CZ: directory_retrieve ---
+; Ucel: Načte výpis LIST/NLST do stránkované paměti adresáře.
+; Vstup: FTP spojení a požadovaný formát ve flag_dir.
+; Vystup: Nový adresář, počty položek a obnovené zobrazení.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb. AF', DE',
+;   HL', IY používané parserem/přenosem.
+; Poznamka: Mění banky, ukazatele a příznaky adresáře; řeší plnou paměť i přerušení.
+; --- KONEC DOKUMENTACE CZ ---
 directory_retrieve				;retrieve directory list
 		call	cls_9			;clear screen from previous directory
 		call	cls_dir_files
@@ -3477,6 +3704,12 @@ dr11		call	print_transfer_status
 ;item= byte 0,1=length of the item, 2=info byte, iteme data, last 2 bytes=length of the item
 
 ;up/down, move through dir, initialisation	
+; --- DOKUMENTACE CZ: dir_move ---
+; Ucel: Obnoví pozici v nově načteném adresáři nebo zvolí první položku.
+; Vstup: Uložená pozice a item_checksum; aktuální adresář.
+; Vystup: Překreslená stránka se správnou pozicí kurzoru.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 dir_move	ld	hl,0
 		ld	(mark_counter),hl	;marked items
 		bit	6,(ix+1)
@@ -3577,6 +3810,12 @@ dir_search_remaining dw 0
 dir_search_patlen dw 0
 ;item_count_len	dw	#5555			;temporary length of dir item being downloaded
 
+; --- DOKUMENTACE CZ: go_updir ---
+; Ucel: Přejde do nadřazeného adresáře.
+; Vstup: Aktuální vzdálený adresář a uložená pozice.
+; Vystup: Nově načtený nadřazený adresář.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 go_updir;	call	check_updir
 		res	6,(ix+1)		;signal, you go updir
 		bit	0,(ix+1)
@@ -3593,6 +3832,13 @@ go_updir;	call	check_updir
 ;		set	6,(hl)
 ;		ret
 
+; --- DOKUMENTACE CZ: download_screen ---
+; Ucel: Stáhne obrazová data a zobrazí je.
+; Vstup: DE = délka obrazových dat (např. 6144/6912); připravený přenos.
+; Vystup: Zobrazený obrázek a následně obnovená obrazovka klienta.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Mění obrazovou RAM a přenosové proměnné.
+; --- KONEC DOKUMENTACE CZ ---
 download_screen	ld	(blen),de		;length of screen= counter (6144 or 6912)
 ;		ld	de,INPBUFF
 ;		ldir
@@ -3658,6 +3904,12 @@ ds2		ld	b,h
 
 
 
+; --- DOKUMENTACE CZ: enter_directory ---
+; Ucel: Otevře vybranou položku: adresář nebo podporovaný obrazový soubor.
+; Vstup: Aktuální položka adresáře; IX = flag1.
+; Vystup: Změněný adresář nebo zobrazený obrázek.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 enter_directory	;and	a
 ;		call	get_item_name
 ;		ld	a,e
@@ -3777,6 +4029,12 @@ ed4		call	undraw_cursor
 
 
 
+; --- DOKUMENTACE CZ: key_down ---
+; Ucel: Posune kurzor o položku nahoru/dolů a případně přeroluje stránku.
+; Vstup: Aktuální pozice, začátek stránky a jejich banky; IX = flag1.
+; Vystup: Nová pozice a aktualizované zobrazení.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 key_down	call	undraw_cursor
 		ld	bc,cur_item_addr
 		ld	de,cur_item_addr_page
@@ -3804,6 +4062,12 @@ kd1		ld	bc,item_pg_start
 kd3		call	print_page
 		jr	kd2
 
+; --- DOKUMENTACE CZ: key_up ---
+; Ucel: Posune kurzor o položku nahoru/dolů a případně přeroluje stránku.
+; Vstup: Aktuální pozice, začátek stránky a jejich banky; IX = flag1.
+; Vystup: Nová pozice a aktualizované zobrazení.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 key_up		call	undraw_cursor
 		ld	bc,cur_item_addr
 		ld	de,cur_item_addr_page
@@ -3855,6 +4119,13 @@ ku1		ld	bc,item_pg_start
 ; This keeps the original IX+... variable layout completely unchanged.
 ; The two-byte item length at either end of an item may itself cross a bank.
 ; -----------------------------------------------------------------------------
+; --- DOKUMENTACE CZ: item_add ---
+; Ucel: Posune uložený ukazatel na sousední položku adresáře (add vpřed, sub zpět).
+; Vstup: BC = adresa proměnné s adresou položky; DE = adresa proměnné s ukazatelem banky.
+; Vystup: NZ = ukazatele aktualizovány; Z = hranice, proměnné ukazatelů nezměněny.
+; Meni: AF, DE, HL; BC, IX a IY zachovány.
+; Poznamka: Používá dir_op_*, next_item_* a mění mapování RAM i při neúspěšném hledání souseda.
+; --- KONEC DOKUMENTACE CZ ---
 item_add
 		ld	(dir_op_addr_var),bc
 		ld	(dir_op_page_var),de
@@ -3946,6 +4217,13 @@ item_add_end
 		ret
 
 
+; --- DOKUMENTACE CZ: item_sub ---
+; Ucel: Posune uložený ukazatel na sousední položku adresáře (add vpřed, sub zpět).
+; Vstup: BC = adresa proměnné s adresou položky; DE = adresa proměnné s ukazatelem banky.
+; Vystup: NZ = ukazatele aktualizovány; Z = hranice, proměnné ukazatelů nezměněny.
+; Meni: AF, DE, HL; BC, IX a IY zachovány.
+; Poznamka: Používá dir_op_*, next_item_* a mění mapování RAM i při neúspěšném hledání souseda.
+; --- KONEC DOKUMENTACE CZ ---
 item_sub
 		ld	(dir_op_addr_var),bc
 		ld	(dir_op_page_var),de
@@ -4022,6 +4300,12 @@ item_sub_start
 		ret
 
 ;0.92a*******************************
+; --- DOKUMENTACE CZ: pg_up ---
+; Ucel: Posune zobrazení adresáře o stránku nahoru/dolů.
+; Vstup: Pozice v adresáři a počet řádků (IX+16).
+; Vystup: Aktualizované ukazatele, kurzor a stránka.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 pg_up
 		scf
 		call	count_from_start_item
@@ -4050,6 +4334,12 @@ pgu1		cp	(ix+16)		;is cursor on last item?
 		ret	z
 
 ;move cursor to screen line A (1..items/page)
+; --- DOKUMENTACE CZ: move_cursor ---
+; Ucel: Přepočítá polohu kurzoru a odpovídající položku stránky.
+; Vstup: Stav kurzoru a začátku stránky.
+; Vystup: Aktualizované cursor_w_curad a ukazatel položky.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 move_cursor
 		push	af
 		call	undraw_cursor
@@ -4088,6 +4378,12 @@ mc3		call	item_add
 ;OUT: NZ=<items/page available
 ;     Z =full page available
 ;     A =number of available items
+; --- DOKUMENTACE CZ: count_from_start_item ---
+; Ucel: Projde položky od začátku stránky pro výpočet pohybu kurzoru.
+; Vstup: item_pg_start/item_pg_start_page a stav okna.
+; Vystup: Výsledek pro stránkování; používá uloženou pracovní pozici.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 count_from_start_item
 		rr	b			;preserve input carry in B bit 7, as original
 		push	bc
@@ -4125,6 +4421,12 @@ cfsi1		ld	hl,(dir_ptr_save_addr)
 		ret
 
 
+; --- DOKUMENTACE CZ: pg_down ---
+; Ucel: Posune zobrazení adresáře o stránku nahoru/dolů.
+; Vstup: Pozice v adresáři a počet řádků (IX+16).
+; Vystup: Aktualizované ukazatele, kurzor a stránka.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 pg_down;		ld	hl,item_sub
 ;		ld	(infsi3+1),hl	;modify the routine to add
 ;		ld	(mc3+1),hl
@@ -4187,6 +4489,13 @@ pgd1_1		push	bc
 ;OUT: DE=length, Z if 0000=end marker, NZ otherwise.
 ;     current item's page is mapped on entry; second header byte page may
 ;     remain mapped if the header straddles a bank.
+; --- DOKUMENTACE CZ: DIR128_CUR_LENGTH_DE ---
+; Ucel: Přečte 16bitovou délku aktuální položky i přes hranici bank.
+; Vstup: cur_item_addr a cur_item_addr_page.
+; Vystup: DE = délka včetně atributu; Z = nulová délka nebo konec RAM.
+; Meni: AF, DE, HL; BC, IX a IY zachovány.
+; Poznamka: Po čtení může zůstat namapovaná banka druhého bajtu hlavičky.
+; --- KONEC DOKUMENTACE CZ ---
 DIR128_CUR_LENGTH_DE
 		ld	hl,(cur_item_addr)
 		ld	de,(cur_item_addr_page)
@@ -4208,6 +4517,13 @@ DIR128_CUR_LENGTH_ZERO
 
 ;Map current item and return HL at its attribute/mark byte (item start + 2).
 ;OUT: HL=attribute byte in correctly mapped directory bank.
+; --- DOKUMENTACE CZ: DIR128_CUR_ATTR_HL ---
+; Ucel: Vrátí adresu atributového bajtu aktuální položky.
+; Vstup: cur_item_addr a cur_item_addr_page.
+; Vystup: NC = HL ukazuje na atribut (položka+2); C = překročena dostupná RAM.
+; Meni: F, DE, HL; A, BC, IX a IY zachovány.
+; Poznamka: Mapuje banku obsahující atribut.
+; --- KONEC DOKUMENTACE CZ ---
 DIR128_CUR_ATTR_HL
 		ld	hl,(cur_item_addr)
 		ld	de,(cur_item_addr_page)
@@ -4216,6 +4532,13 @@ DIR128_CUR_ATTR_HL
 		ret	c
 		jp	DIR128_INC_HL
 
+; --- DOKUMENTACE CZ: print_item ---
+; Ucel: Připraví text aktuální položky v pevné RAM a vytiskne jej.
+; Vstup: cur_item_addr, cur_item_addr_page a tiskový stav.
+; Vystup: Jeden řádek adresáře na obrazovce.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Používá dir_print_buf; čtení zvládá hranice bank.
+; --- KONEC DOKUMENTACE CZ ---
 print_item	ld	hl,(cur_item_addr)	;print one item, bank-safe
 		ld	de,(cur_item_addr_page)
 		call	DIR128_MAP_DE
@@ -4282,6 +4605,12 @@ print_item_buffer_ready
 		ld	de,dir_print_buf
 		call	PRINTHL
 
+; --- DOKUMENTACE CZ: print_item_attrs ---
+; Ucel: Aktualizuje grafické označení položky.
+; Vstup: Aktuální položka a cursor_w_curad.
+; Vystup: Zobrazení odpovídá bitu označení položky.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 print_item_attrs	
 		call	DIR128_CUR_ATTR_HL
 	IFDEF hgfx64x24
@@ -4343,6 +4672,13 @@ pia2		ld	(hl),a
 ;	ENDIF
 
 
+; --- DOKUMENTACE CZ: print_page ---
+; Ucel: Vykreslí aktuální stránku adresáře.
+; Vstup: item_pg_start a jeho banka; IX = flag1.
+; Vystup: Překreslené položky viditelné stránky.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Používá pracovní ukazatele a mapuje adresářové banky.
+; --- KONEC DOKUMENTACE CZ ---
 print_page	;ld	hl,#4800
 ;		ld	b,8*8
 ;		call	cls_9_lines
@@ -4410,6 +4746,14 @@ pp2		pop	hl			;return cursor screen address
 ;The item itself may be 16-bit long. line_length is ONLY the visible width.
 ;roll_addr + roll_page hold the first currently displayed character.
 ;The pointer can therefore move through #FFFF/#C000 without any special case here.
+; --- DOKUMENTACE CZ: roll_item ---
+; Ucel: Umožní vodorovně posouvat jméno delší než šířka řádku.
+; Vstup: Aktuální položka adresáře; IX = flag1.
+; Vystup: Krátké jméno: RET; jiná klávesa při posouvání: návrat do key_loop+3.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb. Při KEYSCAN
+;   pracuje také s alternativní sadou BC'/DE'/HL'.
+; Poznamka: Inicializuje roll_*; klávesy X/Z posouvají jméno.
+; --- KONEC DOKUMENTACE CZ ---
 roll_item
 		call	DIR128_CUR_LENGTH_DE	;DE=stored item length (includes attribute byte)
 		ret	z
@@ -4476,6 +4820,13 @@ roll_item_key	exx
 
 
 ;Move rolling window one character to the right.
+; --- DOKUMENTACE CZ: roll_item_inc ---
+; Ucel: Posune zobrazovaný výřez dlouhého jména o znak vpravo/vlevo.
+; Vstup: Inicializované roll_addr, roll_page, roll_pos a roll_max.
+; Vystup: Aktualizovaný výřez, nebo beze změny na hranici; A=0.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Mění roll_*, mapování RAM a překresluje řádek.
+; --- KONEC DOKUMENTACE CZ ---
 roll_item_inc
 		ld	hl,(roll_pos)
 		ld	de,(roll_max)
@@ -4498,6 +4849,13 @@ roll_item_inc
 
 
 ;Move rolling window one character to the left.
+; --- DOKUMENTACE CZ: roll_item_dec ---
+; Ucel: Posune zobrazovaný výřez dlouhého jména o znak vpravo/vlevo.
+; Vstup: Inicializované roll_addr, roll_page, roll_pos a roll_max.
+; Vystup: Aktualizovaný výřez, nebo beze změny na hranici; A=0.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Mění roll_*, mapování RAM a překresluje řádek.
+; --- KONEC DOKUMENTACE CZ ---
 roll_item_dec
 		ld	hl,(roll_pos)
 		ld	a,h
@@ -4525,6 +4883,13 @@ roll_item_no_move
 ;Print exactly line_length characters from current rolling position.
 ;Each byte is read through DIR128_INC_HL, so the visible window may itself
 ;cross from one directory page to another.
+; --- DOKUMENTACE CZ: print_item_roll ---
+; Ucel: Vytiskne výřez dlouhého jména napříč bankami.
+; Vstup: roll_addr/roll_page; operand pir2+1 = pozice řádku.
+; Vystup: Vytištěno nejvýše line_length znaků; A=0.
+; Meni: AF, B, DE, HL; další registry dle CHAR.
+; Poznamka: Banku průběžně mění DIR128_INC_HL.
+; --- KONEC DOKUMENTACE CZ ---
 print_item_roll
 		ld	hl,(roll_addr)
 		ld	de,(roll_page)
@@ -4552,6 +4917,12 @@ pir1_next
 		ret
 
 ;marking item=bit 0 in item attr byte
+; --- DOKUMENTACE CZ: mark_item ---
+; Ucel: Přepne bit označení aktuální položky a posune kurzor dolů.
+; Vstup: Aktuální položka adresáře; IX = flag1.
+; Vystup: Upraven mark_counter, atribut položky a zobrazení.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 mark_item	call	DIR128_CUR_ATTR_HL
 		ld	a,1
 		xor	(hl)
@@ -4571,6 +4942,14 @@ mi2		ld	(mark_counter),hl
 
 
 ;find item/s
+; --- DOKUMENTACE CZ: find_items ---
+; Ucel: Načte hledaný text, označí shody a přejde na první výsledek.
+; Vstup: Načtený adresář; IX = flag1.
+; Vystup: Shody označeny; bez shod obnoví původní pozici.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb. BC' při
+;   rychlém hledání.
+; Poznamka: Normalizuje INPBUFF, mění txtlen+1, mark_counter a pracovní find_*.
+; --- KONEC DOKUMENTACE CZ ---
 find_items	ld	de,find_txt
 		call	print_ez1
 
@@ -4680,13 +5059,34 @@ find_finish
 		jp	dir_move3
 
 ;mark or unmark all items
+; --- DOKUMENTACE CZ: mark_all ---
+; Ucel: Obsluha příkazu označit / odznačit všechny položky.
+; Vstup: Načtený adresář; IX = flag1.
+; Vystup: Aktualizovaná označení, počet a obrazovka.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb. AF', HL' přes
+;   un_mark_all.
+; --- KONEC DOKUMENTACE CZ ---
 mark_all	and	a
 		jr	unma1
+; --- DOKUMENTACE CZ: unmark_all ---
+; Ucel: Obsluha příkazu označit / odznačit všechny položky.
+; Vstup: Načtený adresář; IX = flag1.
+; Vystup: Aktualizovaná označení, počet a obrazovka.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb. AF', HL' přes
+;   un_mark_all.
+; --- KONEC DOKUMENTACE CZ ---
 unmark_all	scf
 unma1		call	un_mark_all
 		call	prn_mark_items
 		jp	kd3		;print_page, draw_cursor
 
+; --- DOKUMENTACE CZ: undraw_cursor ---
+; Ucel: Nakreslí, resp. odstraní kurzor při zachování označení položky.
+; Vstup: cur_item_addr/cur_item_addr_page, cursor_w_curad.
+; Vystup: A=0 na běžném návratu; aktualizované zvýraznění řádku.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: HGFX používá FDMA a poté obnoví parametry pro tisk znaků.
+; --- KONEC DOKUMENTACE CZ ---
 undraw_cursor	call	DIR128_CUR_ATTR_HL
 	IFDEF hgfx64x24
 		ld	bc,mark_no_cursor
@@ -4702,6 +5102,13 @@ undraw_cursor	call	DIR128_CUR_ATTR_HL
 	ENDIF
 		jr	dc_1
 
+; --- DOKUMENTACE CZ: draw_cursor ---
+; Ucel: Nakreslí, resp. odstraní kurzor při zachování označení položky.
+; Vstup: cur_item_addr/cur_item_addr_page, cursor_w_curad.
+; Vystup: A=0 na běžném návratu; aktualizované zvýraznění řádku.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: HGFX používá FDMA a poté obnoví parametry pro tisk znaků.
+; --- KONEC DOKUMENTACE CZ ---
 draw_cursor	call	DIR128_CUR_ATTR_HL
 	IFDEF hgfx64x24
 		ld	bc,mark_cursor
@@ -4870,6 +5277,12 @@ dc_2		ld	(hl),a
 ;odpovida:		#0800, #0900, #0a00, #0b00, #0c00, #0d00, #0e00, #0f00
 ;vzorec: (zdroj/32)+8
 
+; --- DOKUMENTACE CZ: wind_cls ---
+; Ucel: Vymaže okno používané při práci se seznamem přístupových bodů.
+; Vstup: (IX+16) = počet řádků okna.
+; Vystup: Návrat přes cls_9_lines.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 wind_cls	ld	hl,#4860		;clears window with AP list, line 3
 		ld	a,(ix+16)
 		add	a,a
@@ -4905,11 +5318,23 @@ roll_max	dw	0
 ;	xor	(hl)
 ;	ld	(hl),a	;spravne nastavovani bitu pres xor, nahradit do nize uvedenych rutin
 
+; --- DOKUMENTACE CZ: set_onoff ---
+; Ucel: Přepne, zda Wi-Fi zůstane při ukončení zapnutá.
+; Vstup: IX = flag1; bit 2 v (IX+3) určuje podporovaný hardware.
+; Vystup: Přepnut bit 3 v (IX+0), pokud jej hardware podporuje.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 set_onoff	bit	2,(ix+3)	;find out which wifi is it, MB or el? (el wifi cannot be turned off)
 		ret	z
 		ld	a,8		;toggle bit 3 of flag1 (Wifi on/off on quit)
 		xor	(ix+0)
 		ld	(ix+0),a
+; --- DOKUMENTACE CZ: prn_w_onoff ---
+; Ucel: Vypíše nastavení Wi-Fi při ukončení, resp. automatického přihlášení.
+; Vstup: IX = flag1; příslušné bity (IX+0).
+; Vystup: Aktualizovaný údaj v menu.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 prn_w_onoff	bit	3,(ix+0)	;print WIFI ON/OFF status
 		ld	de,off
 		jr	z,set_w_onoff_p
@@ -4917,9 +5342,21 @@ prn_w_onoff	bit	3,(ix+0)	;print WIFI ON/OFF status
 set_w_onoff_p	ld	hl,txt_adr_menu2+7
 		jp	PRINTHL
 
+; --- DOKUMENTACE CZ: set_alogin ---
+; Ucel: Přepne automatické přihlašování.
+; Vstup: IX = flag1.
+; Vystup: Přepnut bit 1 v (IX+0), vypsán nový stav.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 set_alogin	ld	a,2		;toggle bit 1 of flag1 (auto login on/off)
 		xor	(ix+0)
 		ld	(ix+0),a
+; --- DOKUMENTACE CZ: prn_alogin ---
+; Ucel: Vypíše nastavení Wi-Fi při ukončení, resp. automatického přihlášení.
+; Vstup: IX = flag1; příslušné bity (IX+0).
+; Vystup: Aktualizovaný údaj v menu.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 prn_alogin	bit	1,(ix+0)	;print auto login status
 		ld	de,yes
 		jr	z,prn_alogin_p
@@ -4928,6 +5365,13 @@ prn_alogin_p	ld	hl,txt_adr_menu1+17
 		jp	PRINTHL
 
 
+; --- DOKUMENTACE CZ: set_filename ---
+; Ucel: Nechá uživatele změnit výchozí název souboru.
+; Vstup: IX = flag1.
+; Vystup: Nový nulou ukončený var_name a aktualizovaný výpis.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Zrušení vstupu přechází přes clear_ini_keyl do hlavní smyčky.
+; --- KONEC DOKUMENTACE CZ ---
 set_filename	ld	de,enter_fil_nam	;set new default file name
 		call	print_ez1
 
@@ -4942,6 +5386,12 @@ set_filename	ld	de,enter_fil_nam	;set new default file name
 		ld	(hl),0
 		jr	prn_file_start
 
+; --- DOKUMENTACE CZ: set_start ---
+; Ucel: Načte desetinnou počáteční adresu souboru.
+; Vstup: IX = flag1.
+; Vystup: Nové var_start a aktualizovaný výpis.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 set_start	ld	de,enter_start_add	;set new default file name
 		call	print_ez1
 		call	input_line
@@ -4951,6 +5401,12 @@ set_start	ld	de,enter_start_add	;set new default file name
 		call	ConvRStr16
 		ld	(var_start),hl
 
+; --- DOKUMENTACE CZ: prn_file_start ---
+; Ucel: Vypíše výchozí název souboru a počáteční adresu.
+; Vstup: var_name, var_start; IX = flag1.
+; Vystup: Aktualizovaný řádek 17; vymazaná editační oblast.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 prn_file_start	
 	IFDEF hgfx64x24
 		ld	bc,#0111
@@ -4976,6 +5432,13 @@ prn_file_start
 pfs1		call	PRINT
 		jp	clear_edit_zone
 
+; --- DOKUMENTACE CZ: set_user ---
+; Ucel: Načte uživatelské jméno, resp. heslo FTP.
+; Vstup: IX = flag1; bit 2 v (IX+0) řídí maskování hesla.
+; Vystup: Aktualizované var_user / var_pasw a stavový řádek.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Při vstupu hesla upravuje operand INX_HS+1.
+; --- KONEC DOKUMENTACE CZ ---
 set_user	ld	de,enter_usr
 		call	print_ez1
 
@@ -4992,6 +5455,13 @@ su1		push	de
 		ld	(hl),0
 		jr	prn_host_usr_psw
 
+; --- DOKUMENTACE CZ: set_pass ---
+; Ucel: Načte uživatelské jméno, resp. heslo FTP.
+; Vstup: IX = flag1; bit 2 v (IX+0) řídí maskování hesla.
+; Vystup: Aktualizované var_user / var_pasw a stavový řádek.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Při vstupu hesla upravuje operand INX_HS+1.
+; --- KONEC DOKUMENTACE CZ ---
 set_pass	ld	de,psw
 		call	print_ez1
 		ld	de,var_pasw
@@ -5002,11 +5472,23 @@ set_pass	ld	de,psw
 set_pass1	ld	(INX_HS+1),a
 		jr	su1
 
+; --- DOKUMENTACE CZ: set_hide_pass ---
+; Ucel: Přepne skrývání hesla na obrazovce.
+; Vstup: Příznaky ve flag1.
+; Vystup: Přepnut bit 2 ve flag1 a překreslen řádek nastavení.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 set_hide_pass	ld	hl,flag1		;toggle bit 2 of flag1 (hide ftp password)
 		ld	a,4
 		xor	(hl)
 		ld	(hl),a
 	
+; --- DOKUMENTACE CZ: prn_host_usr_psw ---
+; Ucel: Vypíše server, uživatele a případně maskované heslo.
+; Vstup: host_url, var_user, var_pasw; bit 2 v (IX+0).
+; Vystup: Aktualizovaný řádek 18; vymazaná editační oblast.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 prn_host_usr_psw
 		IFDEF hgfx64x24
 		ld	bc,#0112
@@ -5043,6 +5525,12 @@ phup		push	bc
 		jp	pfs1+3			;jp clear_edit_zone
 
 
+; --- DOKUMENTACE CZ: set_list_nlst ---
+; Ucel: Přepne požadovaný způsob výpisu LIST/NLST.
+; Vstup: flag_dir.
+; Vystup: Přepnut bit 4 ve flag_dir a aktualizovaný výpis režimu.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 set_list_nlst	ld	hl,flag_dir
 		bit	4,(hl)
 		jr	z,sln1		;Z=LIST->NLST
@@ -5050,6 +5538,12 @@ set_list_nlst	ld	hl,flag_dir
 		jr	prn_lst_nlst_abbr_ful
 sln1		set	4,(hl)
 
+; --- DOKUMENTACE CZ: set_full_abbr ---
+; Ucel: Přepne plný/zkrácený LIST; u NLST volí plný formát.
+; Vstup: flag_dir.
+; Vystup: Aktualizován bit 2 ve flag_dir a výpis režimu.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 set_full_abbr	ld	hl,flag_dir
 		bit	4,(hl)
 		jr	nz,sfa1		;NZ=NLST
@@ -5059,6 +5553,12 @@ sfa2		res	2,(hl)		;set to abbr
 		jr	prn_lst_nlst_abbr_ful
 sfa1		set	2,(hl)		;set to full
 
+; --- DOKUMENTACE CZ: prn_lst_nlst_abbr_ful ---
+; Ucel: Vypíše požadovaný režim seznamu a jeho podrobnost.
+; Vstup: Bity 4 a 2 v (IX+1).
+; Vystup: Aktualizované označení LIST/NLST a full/abbr.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 prn_lst_nlst_abbr_ful
 		bit	4,(ix+1)
 		ld	de,ftp_list
@@ -5072,6 +5572,13 @@ plnaf1		ld	hl,txt_adr_meziradek+55
 		ld	de,full
 plnaf2		jp	PRINT
 
+; --- DOKUMENTACE CZ: prn_mark_items ---
+; Ucel: Vypíše počet označených položek.
+; Vstup: mark_counter.
+; Vystup: Aktualizovaný počet na obrazovce.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Používá block_asci a převod HL2ASCII.
+; --- KONEC DOKUMENTACE CZ ---
 prn_mark_items	ld	hl,(mark_counter)
 		ld	de,block_asci
 		push	de
@@ -5084,6 +5591,13 @@ prn_mark_items	ld	hl,(mark_counter)
 		ld	de,spaces+30
 		jp	PRINT
 
+; --- DOKUMENTACE CZ: quit_program ---
+; Ucel: Ukončí klienta, obnoví prostředí a předá řízení BASICu.
+; Vstup: IX = flag1; uložená původní rychlost CPU.
+; Vystup: Nejde o běžný RET; návrat přes ROM na #1B76.
+; Meni: AF, BC, DE, HL, IX/IY dle služeb; explicitně IY a SP.
+; Poznamka: Nastavuje Wi-Fi dle volby, ruší platnost adresáře, vypíná HGFX a povoluje přerušení.
+; --- KONEC DOKUMENTACE CZ ---
 quit_program
 
 ;allok		ld	bc,0		;0= all ok (for return to BASIC)
@@ -5144,6 +5658,15 @@ return_speed	ld	a,#55		;speed is 0-3
 ;look for a string in received bytes string, for receive string evaluation purposes
 ;IN=HL start of the memory area, DE=start of the string we look for, must end with 0, BC=max.len of searched memory, OUT=Z=found, HL=start address of found string in memory, DE=byte coming after found string, NZ=string not found
 ;10)
+; --- DOKUMENTACE CZ: look_for_string ---
+; Ucel: Vyhledá nulou ukončený vzor v omezené oblasti paměti.
+; Vstup: HL = prohledávaná oblast, BC = její délka, DE = neprázdný vzor zakončený nulou; IX =
+;   flag1.
+; Vystup: Z = nalezeno: HL začátek shody, DE za shodou; NZ = nenalezeno.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: Mění bit 0 v (IX+0) a operand lfs5+1; dočasně používá SP, při návratu jej obnoví.
+;   Není reentrantní.
+; --- KONEC DOKUMENTACE CZ ---
 look_for_string	ld (lfs5+1),sp
 		set 0,(ix+0)
 
@@ -5201,6 +5724,13 @@ lfs5		ld sp,#5555
 ;IN=HL=start of looked for string, must end with 0
 ;OUT=Z=string found, NZ=string not found
 ;11)
+; --- DOKUMENTACE CZ: look_on_fly ---
+; Ucel: Hledá nulou ukončený text přímo v přijímaných bajtech UART.
+; Vstup: HL = hledaný neprázdný text.
+; Vystup: Z = text nalezen, NZ = vypršelo hledání.
+; Meni: AF, BC, E, HL, BC'; navíc dle rece_byte.
+; Poznamka: Přijaté bajty spotřebuje; neukládá je do RX_buf.
+; --- KONEC DOKUMENTACE CZ ---
 look_on_fly	exx
 		ld	bc,0
 		exx
@@ -5244,6 +5774,14 @@ lofend1		inc	e
 		ret			;Z/NZ
 
 ;12)
+; --- DOKUMENTACE CZ: search_by_Busy ---
+; Ucel: Původní vyhledávání vzoru bez rozlišení velikosti písmen.
+; Vstup: DE = text, BC = délka; INPBUFF a txtlen+1 = vzor a jeho délka.
+; Vystup: Z = shoda, NZ = nenalezeno.
+; Meni: AF, BC, DE, HL, BC'; při větvi nenasel zůstávají sady BC/DE/HL prohozené.
+; Poznamka: Převádí vzor v INPBUFF na malá písmena. Pro stránkovaný adresář slouží
+;   search_by_Busy_dir.
+; --- KONEC DOKUMENTACE CZ ---
 search_by_Busy			;IN=DE= starting item address, BC=its length
 ;OUT=Z=found, NZ=not found
 		push	bc
@@ -5289,6 +5827,12 @@ cpi		ld   a,(de)
 nenasel		inc	a	;set NZ
 		ret
 
+; --- DOKUMENTACE CZ: convert ---
+; Ucel: Převede velké ASCII písmeno A–Z na malé.
+; Vstup: A = znak.
+; Vystup: A = převedený znak; ostatní znaky beze změny.
+; Meni: AF; ostatní běžné registry zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 convert		cp	"A"
 		ret	c
 		cp	"Z"+1
@@ -5305,8 +5849,26 @@ convert		cp	"A"
 
 
 ;7)
+; --- DOKUMENTACE CZ: receive_data_timeout ---
+; Ucel: Přijme nejvýše BC bajtů do paměti; čekání omezuje čítačem DE.
+; Vstup: HL = cíl, BC = počet; receive_data1 navíc DE = čítač čekání, receive_data_timeout
+;   nastaví #290.
+; Vystup: HL za daty, BC = nepřijatý zbytek; BC=0 znamená úplný příjem.
+; Meni: AF, BC, DE, HL; navíc dle rece_byte.
+; Poznamka: Z se nastaví i při vypršení DE! Úplnost ověřujte pomocí BC, nikoli samotného Z. DE
+;   se po bajtu neobnovuje.
+; --- KONEC DOKUMENTACE CZ ---
 receive_data_timeout
 		ld de,#290		;timeout, if #80, only app. first #500 bytes carried correctly
+; --- DOKUMENTACE CZ: receive_data1 ---
+; Ucel: Přijme nejvýše BC bajtů do paměti; čekání omezuje čítačem DE.
+; Vstup: HL = cíl, BC = počet; receive_data1 navíc DE = čítač čekání, receive_data_timeout
+;   nastaví #290.
+; Vystup: HL za daty, BC = nepřijatý zbytek; BC=0 znamená úplný příjem.
+; Meni: AF, BC, DE, HL; navíc dle rece_byte.
+; Poznamka: Z se nastaví i při vypršení DE! Úplnost ověřujte pomocí BC, nikoli samotného Z. DE
+;   se po bajtu neobnovuje.
+; --- KONEC DOKUMENTACE CZ ---
 receive_data1	ld a,b			;bios1.2, timeout have to increase to #200
 		or c
 		ret z			;Z=length reached, return
@@ -5332,6 +5894,12 @@ rd1		ld (hl),a
 ;SENDING
 ;IN=HL string (ends with 0), OUT=Z=string has been sent, NZ=not sent, timeout
 ;1)
+; --- DOKUMENTACE CZ: clear_exp_name ---
+; Ucel: Vyplní desetiznakový název souboru mezerami.
+; Vstup: Bez parametrů.
+; Vystup: exp_name[0..9] = mezery; BC = 0.
+; Meni: F, BC, DE, HL; A zachován.
+; --- KONEC DOKUMENTACE CZ ---
 clear_exp_name	ld	hl,exp_name		;helper: blank the 10-char file name buffer
 		ld	de,exp_name+1
 		ld	bc,9
@@ -5339,12 +5907,31 @@ clear_exp_name	ld	hl,exp_name		;helper: blank the 10-char file name buffer
 		ldir
 		ret
 
+; --- DOKUMENTACE CZ: print_ez2 ---
+; Ucel: Vypíše text na první, resp. druhý řádek editační oblasti.
+; Vstup: DE = text pro PRINTHL.
+; Vystup: Text na obrazovce; návrat přes PRINTHL.
+; Meni: HL; další změny dle PRINTHL.
+; --- KONEC DOKUMENTACE CZ ---
 print_ez2	ld	hl,txt_adr_edit_zone2	;helper: load edit-zone-2 address then print
 		jp	PRINTHL
 
+; --- DOKUMENTACE CZ: print_ez1 ---
+; Ucel: Vypíše text na první, resp. druhý řádek editační oblasti.
+; Vstup: DE = text pro PRINTHL.
+; Vystup: Text na obrazovce; návrat přes PRINTHL.
+; Meni: HL; další změny dle PRINTHL.
+; --- KONEC DOKUMENTACE CZ ---
 print_ez1	ld	hl,txt_adr_edit_zone1	;helper: load edit-zone-1 address then print
 		jp	PRINTHL
 
+; --- DOKUMENTACE CZ: send_string ---
+; Ucel: Odešle nulou ukončený řetězec do Wi-Fi modulu.
+; Vstup: HL = adresa textu zakončeného nulou.
+; Vystup: Z = odesláno, NZ = timeout; HL = aktuální pozice v textu.
+; Meni: AF, B, DE, HL; při výpisu a volání send_byte také dle těchto služeb.
+; Poznamka: Volitelně text vypisuje; mění barvu okraje. Nulový terminátor neodesílá.
+; --- KONEC DOKUMENTACE CZ ---
 send_string	jr ss6			;send_string+1:0 for print info (jr ss6), 18 for not print info (jr ss5)
 
 ss6		push hl			;print it first
@@ -5389,6 +5976,12 @@ ss3		inc hl
 
 ;IN=HL start of data, BC=data len, OUT=Z=data has been sent
 ;2)
+; --- DOKUMENTACE CZ: send_data ---
+; Ucel: Odešle binární blok do Wi-Fi modulu.
+; Vstup: HL = data, BC = délka.
+; Vystup: Z = vše odesláno, BC=0; NZ = timeout, BC zbývá odeslat.
+; Meni: AF, BC, DE, HL; navíc dle send_byte.
+; --- KONEC DOKUMENTACE CZ ---
 send_data	ld a,b
 		or c
 		ret z			;Z=len of data in BC sent
@@ -5419,6 +6012,12 @@ sd2		ld a,(hl)
 ;OTHERS
 ;15)
 ;IN=HL=command, out=BC=len of command, must end with 0
+; --- DOKUMENTACE CZ: count_com_len ---
+; Ucel: Spočítá délku nulou ukončeného řetězce.
+; Vstup: HL = začátek řetězce.
+; Vystup: BC = délka bez nuly; HL ukazuje na nulu, A=0, Z.
+; Meni: AF, BC, HL; DE, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 count_com_len	ld	bc,0		;counts command length, 16 bit length
 cc1		ld	a,(hl)
 		or	a
@@ -5432,6 +6031,14 @@ cc1		ld	a,(hl)
 
 	
 ;16)
+; --- DOKUMENTACE CZ: ConvRStr16 ---
+; Ucel: Převede posloupnost desetinných číslic na 16bitové číslo.
+; Vstup: DE = začátek číslic.
+; Vystup: HL = hodnota modulo 65536; DE ukazuje na první nečíselný znak, NC.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: BC drží hodnotu před poslední číslicí; bez číslic zůstává původní. Nekontroluje
+;   přetečení; Z nemá pevný význam.
+; --- KONEC DOKUMENTACE CZ ---
 ConvRStr16
 ;===============================================================
 ;http://z80-heaven.wikidot.com/math#toc32
@@ -5477,11 +6084,32 @@ ConvLoop:             ;
 
 ;17)
 ;IN=HL=number, OUT=DE=address with the string
+; --- DOKUMENTACE CZ: HL2ASCII ---
+; Ucel: Zapíše 16bitové číslo jako desetinný text bez úvodních nul.
+; Vstup: HL = číslo, DE = cílový buffer; IX = flag1.
+; Vystup: DE za poslední číslicí; HL = zbytek jednotek.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: Mění bit 7 v (IX+0); nepřidává nulový terminátor.
+; --- KONEC DOKUMENTACE CZ ---
 HL2ASCII		res 7,(IX+0)		;Leading zero suppression
+; --- DOKUMENTACE CZ: HL2ASCII_00000 ---
+; Ucel: Vstup do převodu od řádu desetitisíců, resp. stovek.
+; Vstup: HL = číslo, DE = cíl; bit 7 v (IX+0) řídí tisk úvodních nul.
+; Vystup: DE za poslední číslicí, bez nulového terminátoru.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: Na rozdíl od HL2ASCII nenuluje bit 7. Pro pevnou šířku jej nastavte před voláním.
+; --- KONEC DOKUMENTACE CZ ---
 HL2ASCII_00000		ld bc,10000
 			call string_dl
 			ld bc,1000
 			call string_dl
+; --- DOKUMENTACE CZ: HL2ASCII_000 ---
+; Ucel: Vstup do převodu od řádu desetitisíců, resp. stovek.
+; Vstup: HL = číslo, DE = cíl; bit 7 v (IX+0) řídí tisk úvodních nul.
+; Vystup: DE za poslední číslicí, bez nulového terminátoru.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: Na rozdíl od HL2ASCII nenuluje bit 7. Pro pevnou šířku jej nastavte před voláním.
+; --- KONEC DOKUMENTACE CZ ---
 HL2ASCII_000		ld bc,100
 			call string_dl
 			ld bc,10
@@ -5492,6 +6120,13 @@ HL2ASCII_000		ld bc,100
 			INC DE
 			RET
 			
+; --- DOKUMENTACE CZ: string_dl ---
+; Ucel: Vypočítá a případně zapíše jednu desetinnou číslici.
+; Vstup: HL = zbytek čísla, BC = desítkový řád, DE = cíl; IX = flag1.
+; Vystup: HL = zbytek po odečtení řádu; DE posunut pouze při zápisu číslice.
+; Meni: AF, DE, HL; BC, IX a IY zachovány.
+; Poznamka: Používá a nastavuje bit 7 v (IX+0) pro potlačení úvodních nul.
+; --- KONEC DOKUMENTACE CZ ---
 string_dl:		ld a,'0'-1
 
 string_lp2:		inc a
@@ -5517,12 +6152,38 @@ string_store:		BIT 7,(IX+0)		;Test if still leading zeros
 
 	IFUSED wait_long
 ;18)
+; --- DOKUMENTACE CZ: wait_long ---
+; Ucel: Provede B dlouhých čekacích smyček; wait_long nastaví B=3.
+; Vstup: wait_long_def: B = počet opakování (0 znamená 256).
+; Vystup: B=0, DE=0, A=0, Z.
+; Meni: AF, B, DE; C, HL, IX a IY zachovány.
+; Poznamka: Délka závisí na frekvenci CPU.
+; --- KONEC DOKUMENTACE CZ ---
 wait_long	ld	b,3		;wait long time, DE delay fixed (3x 65536 times)
+; --- DOKUMENTACE CZ: wait_long_def ---
+; Ucel: Provede B dlouhých čekacích smyček; wait_long nastaví B=3.
+; Vstup: wait_long_def: B = počet opakování (0 znamená 256).
+; Vystup: B=0, DE=0, A=0, Z.
+; Meni: AF, B, DE; C, HL, IX a IY zachovány.
+; Poznamka: Délka závisí na frekvenci CPU.
+; --- KONEC DOKUMENTACE CZ ---
 wait_long_def	call	wait_short	;wait long time, DE delay suer defined (Bx 65536 times), IN=B=delay
 		djnz	wait_long_def
 		ret
 
+; --- DOKUMENTACE CZ: wait_short ---
+; Ucel: Provede čekací smyčku s 16bitovým čítačem.
+; Vstup: wait_short_def: DE = počet kroků; wait_short nastaví DE=0 (65536 kroků).
+; Vystup: DE=0, A=0, Z.
+; Meni: AF, DE; BC, HL, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 wait_short	ld	de,0		;wait short time, DE delay fixed (65536 times) (tady by mela stacit polovicni hodnota tedy #8000)!!!!
+; --- DOKUMENTACE CZ: wait_short_def ---
+; Ucel: Provede čekací smyčku s 16bitovým čítačem.
+; Vstup: wait_short_def: DE = počet kroků; wait_short nastaví DE=0 (65536 kroků).
+; Vystup: DE=0, A=0, Z.
+; Meni: AF, DE; BC, HL, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 wait_short_def	dec	de		;wait short time, DE delay user defined,IN=DE=delay
 		ld	a,d
 		or	e
@@ -5532,6 +6193,12 @@ wait_short_def	dec	de		;wait short time, DE delay user defined,IN=DE=delay
 	ENDIF
 
 ;19)
+; --- DOKUMENTACE CZ: print_title ---
+; Ucel: Vymaže horní oblast a vytiskne podtržený název aplikace.
+; Vstup: IX = flag1, inicializované zobrazení.
+; Vystup: Nadpis na obrazovce.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 print_title
 	IFDEF hgfx64x24
 		ld	bc,#0200	
@@ -5554,6 +6221,13 @@ underl		ld	a,34			;""""
 		ret
 
 ;20) save dir position, so that you can renew the dir from where you have been
+; --- DOKUMENTACE CZ: save_dir_position ---
+; Ucel: Uloží polohu v adresáři včetně banky, kurzoru a kontrolních bajtů.
+; Vstup: Aktuální ukazatele adresáře a IX = flag1.
+; Vystup: Stav uložen do *_tmp a item_checksum.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: Nastavuje bit 6 v (IX+1); může přemapovat adresářovou RAM.
+; --- KONEC DOKUMENTACE CZ ---
 save_dir_position
 ;		res	6,(ix+1)
 		set	6,(ix+1)		;signal, we enter dir
@@ -5612,6 +6286,13 @@ sdp_save_screen
 
 
 ;22) by Busy
+; --- DOKUMENTACE CZ: ConvRStr32 ---
+; Ucel: Převede desetinný text na 32bitové číslo.
+; Vstup: BC = adresa prvního znaku.
+; Vystup: HL = horních 16 bitů, DE = dolních 16 bitů; BC = první nečíselný znak, NC.
+; Meni: AF, BC, DE, HL, BC', DE', HL'; IX a IY zachovány.
+; Poznamka: Výsledek je HL:DE podle skutečného závěru kódu; přetečení se nekontroluje.
+; --- KONEC DOKUMENTACE CZ ---
 ConvRStr32
 
 ;; Vstup: BC = zaciatok postupnosti cislic ukoncena znakom inym ako cislica
@@ -5671,6 +6352,13 @@ d32ano	ld	d,h
 
 
 ;28) (Busy's routine)
+; --- DOKUMENTACE CZ: HL2ASCII32 ---
+; Ucel: Převede 32bitové číslo z pracovního bufferu na desetinný text.
+; Vstup: zzbin = čtyři bajty čísla, nejnižší bajt první.
+; Vystup: DE = první platná ASCII číslice v zzdec; HL za číslicemi.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: Ničí původní obsah zzbin; mění zzdec, využívá nulu za bufferem.
+; --- KONEC DOKUMENTACE CZ ---
 HL2ASCII32
 ;Prevod bin->dec bez znamienka
 ; in: bin
@@ -5720,6 +6408,12 @@ asc32_n	ld	a,#30
 	djnz	asc32_n
 	ret
 
+; --- DOKUMENTACE CZ: binx2 ---
+; Ucel: Posune čtyřbajtové číslo v zzbin o jeden bit doleva.
+; Vstup: Číslo v zzbin.
+; Vystup: C = původní nejvyšší bit; zzbin obsahuje posunuté číslo.
+; Meni: AF, B, HL; C (registr), DE, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 binx2	ld	hl,zzbin            ;; Nasobenie bin dvomi
 	ld	b,llbin
 	xor	a
@@ -5739,6 +6433,13 @@ lldec	=	eedec-zzdec
 	db	0			;zaráka pro tisk
 
 ;29)input: timeout in (ix+6), output, Z="OK" found, NZ=answer "OK" not found
+; --- DOKUMENTACE CZ: send_at_check_ok ---
+; Ucel: Pošle AT a hledá odpověď OK.
+; Vstup: (IX+6) = počet pokusů; IX = flag1.
+; Vystup: Z = OK nalezeno; NZ = vyčerpány pokusy.
+; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
+; Poznamka: Mění RX_buf a (IX+6); chyba odeslání přechází do error_handler.
+; --- KONEC DOKUMENTACE CZ ---
 send_at_check_ok
 		call	wifi_wait
 		ld	hl,at
@@ -5778,11 +6479,25 @@ send_at_check_ok
 
 
 ;40) OUT CY 0=OK, 1= speed not supported, set and print UART speed
+; --- DOKUMENTACE CZ: set_print_speed ---
+; Ucel: Nastaví index rychlosti UART a vypíše jej.
+; Vstup: A = index rychlosti pro set_baud.
+; Vystup: Vrací A/F uložené před set_baud, ovšem po SCF; Carry tedy zůstává nastaven.
+; Meni: BC, DE, HL dle set_baud a tisku; A zachován, F má nastavený Carry.
+; Poznamka: Původní poznámka o Carry jako výsledku set_baud neodpovídá PUSH AF / POP DE.
+; --- KONEC DOKUMENTACE CZ ---
 set_print_speed	scf
 		push	af
 		call	set_baud
 		pop	de
 		ld	a,d		;A=speed 0-23 we set
+; --- DOKUMENTACE CZ: print_speed ---
+; Ucel: Vypíše číselný index rychlosti UART.
+; Vstup: A = index rychlosti.
+; Vystup: A/F obnoveny; uložená tisková pozice HLKO+1 obnovena.
+; Meni: BC, DE, HL; AF zachován; další registry dle PRINTHL.
+; Poznamka: Používá TX_buf a bit 7 v (IX+0).
+; --- KONEC DOKUMENTACE CZ ---
 print_speed	push	af
 ps2		ld	de,TX_buf
 		push	de
@@ -5810,6 +6525,13 @@ ps2		ld	de,TX_buf
 
 
 ;48)
+; --- DOKUMENTACE CZ: convASCII2hex ---
+; Ucel: Složí dolní půlbajty dvou znaků do jednoho bajtu.
+; Vstup: HL = adresa dvou ASCII číslic, např. "14".
+; Vystup: A = #14 pro vstup "14"; HL ukazuje na druhý znak.
+; Meni: AF, E, HL; D, BC, IX a IY zachovány.
+; Poznamka: Není obecný hexadecimální parser: nepřevádí písmena A–F.
+; --- KONEC DOKUMENTACE CZ ---
 convASCII2hex
 ;IN=HL ASCII number address (2 digits) eg. hl,14
 ;OUT=A=#14
@@ -5827,6 +6549,12 @@ convASCII2hex
 		ret
 
 ;49) clear whole screen
+; --- DOKUMENTACE CZ: cls_4000 ---
+; Ucel: Vymaže celou obrazovku, podle sestavení klasickou nebo HGFX.
+; Vstup: Bez parametrů.
+; Vystup: Vymazaná obrazovka.
+; Meni: Klasika: F, BC, DE, HL (HL=#4000); HGFX: dle hgfxcls.
+; --- KONEC DOKUMENTACE CZ ---
 cls_4000
 	IFDEF hgfx64x24
 		jp	hgfxcls
@@ -5849,13 +6577,39 @@ cls_4000
 ;cls_9_hl	ld	b,8*9
 
 	IFDEF	hgfx64x24
+; --- DOKUMENTACE CZ: cls_9 ---
+; Ucel: Vymaže osm řádků okna adresáře.
+; Vstup: Bez parametrů.
+; Vystup: Vymazané okno; navazuje na cls_9_lines.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Historický název obsahuje 9, aktivní kód nastavuje osm řádků.
+; --- KONEC DOKUMENTACE CZ ---
 cls_9		ld	bc,#0808		;B=number of lines, C=starting line
+; --- DOKUMENTACE CZ: cls_9_lines ---
+; Ucel: Vymaže zadaný počet řádků zvolené obrazovky.
+; Vstup: HGFX: B=počet textových řádků, C=první řádek; klasika: HL=adresa, B=počet mikrorádků.
+; Vystup: Vymazaná oblast; A=0 na běžném návratu.
+; Meni: AF, B, E, HL; HGFX také C, DE a změny dle give_coords.
+; --- KONEC DOKUMENTACE CZ ---
 cls_9_lines	jr	clear_line_hgfx
 	ELSE
 
 
+; --- DOKUMENTACE CZ: cls_9 ---
+; Ucel: Vymaže osm řádků okna adresáře.
+; Vstup: Bez parametrů.
+; Vystup: Vymazané okno; navazuje na cls_9_lines.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Historický název obsahuje 9, aktivní kód nastavuje osm řádků.
+; --- KONEC DOKUMENTACE CZ ---
 cls_9		ld	hl,#4800
 		ld	b,8*8
+; --- DOKUMENTACE CZ: cls_9_lines ---
+; Ucel: Vymaže zadaný počet řádků zvolené obrazovky.
+; Vstup: HGFX: B=počet textových řádků, C=první řádek; klasika: HL=adresa, B=počet mikrorádků.
+; Vystup: Vymazaná oblast; A=0 na běžném návratu.
+; Meni: AF, B, E, HL; HGFX také C, DE a změny dle give_coords.
+; --- KONEC DOKUMENTACE CZ ---
 cls_9_lines	push	hl
 		xor	a
 		ld	e,#20
@@ -5871,6 +6625,12 @@ cls_91		ld	(hl),a
 	ENDIF
 
 ;54) clears edit zone (2 bottom lines)
+; --- DOKUMENTACE CZ: clear_edit_zone ---
+; Ucel: Vymaže dva spodní řádky určené pro zadávání a hlášení.
+; Vstup: Bez parametrů.
+; Vystup: Vymazané řádky 22–23.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 clear_edit_zone
 	IFDEF hgfx64x24
 		ld	bc,#0216
@@ -5908,6 +6668,13 @@ clh1		push	bc
 		ret
 */
 
+; --- DOKUMENTACE CZ: clear_line_hgfx ---
+; Ucel: Vyplní požadované textové řádky nulami pomocí FDMA.
+; Vstup: B = počet řádků, C = první řádek.
+; Vystup: B=0, C za posledním řádkem; FDMA vráceno do režimu znaků.
+; Meni: AF, BC, DE, HL; další změny dle give_coords.
+; Poznamka: Mění souřadnice VIDEO_REGS a konfiguraci FDMA.
+; --- KONEC DOKUMENTACE CZ ---
 clear_line_hgfx
 ;input=BC, B=how many lines, C= starting line
 		ld	h,c
@@ -6116,6 +6883,13 @@ prn_sig_txt	call	PRINT
 ;NZ=3= TCP or UDP connected, but not ftp (only internal state of routine), routine will change it to status 4, NZ)
 ;OUT="current_host" either X, if not connected to ftp server, or host name if connected
 ;OUT=Z=HL=code returned by NOOP, NZ=HL=0
+; --- DOKUMENTACE CZ: get_status_ftp ---
+; Ucel: Zjistí stav spojení modulu a aktualizuje stav FTP klienta.
+; Vstup: IX = flag1; dostupný Wi-Fi modul.
+; Vystup: Aktualizované status_byte, current_host/current_login a obrazovka.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Používá AT+CIPSTATUS; nevyhovující předchozí spojení může uzavřít.
+; --- KONEC DOKUMENTACE CZ ---
 get_status_ftp	call	clear_rece_buf
 
 		ld	de,STATUS
@@ -6280,6 +7054,12 @@ gs8		ld	hl,at_cipclose	;status 3 but not connected to FTP (probably from previou
 */
 
 ;53) sets speed 155200 Bd on module and UART
+; --- DOKUMENTACE CZ: set_def_wifi_speed ---
+; Ucel: Nastaví výchozí rychlost UART i modulu, index 7 (115200 Bd).
+; Vstup: D = známý současný index rychlosti, případně 255.
+; Vystup: Návrat přes set_ud_speed_a.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 set_def_wifi_speed
 
 		ld	a,7
@@ -6287,6 +7067,13 @@ set_def_wifi_speed
 
 
 ;55) a key
+; --- DOKUMENTACE CZ: akey ---
+; Ucel: Vyčká na uvolnění předchozí klávesy a nový stisk.
+; Vstup: Bez parametrů.
+; Vystup: A = nenulový kód klávesy, NZ.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Zobrazuje a maže výzvu v editační oblasti.
+; --- KONEC DOKUMENTACE CZ ---
 akey		call	wifi_unwait
 
 akey1		call	inkey
@@ -6310,12 +7097,26 @@ akey2		ld	de,akey_txt
 
 ;56) wifi_wait/unwait	signals, that we wait for wifi
 	IFDEF hgfx64x24
+; --- DOKUMENTACE CZ: wifi_wait ---
+; Ucel: Zobrazí, resp. odstraní indikátor čekání na Wi-Fi.
+; Vstup: Bez parametrů.
+; Vystup: Aktualizovaný indikátor na obrazovce; AF obnoven.
+; Meni: Bez HGFX žádné; s HGFX HL a registry dle CHAR, AF zachován.
+; Poznamka: HGFX varianta mění VIDEO_REGS a obnovuje běžnou barvu/roviny.
+; --- KONEC DOKUMENTACE CZ ---
 wifi_wait	push	af
 		call	wu2
 ;		inc	a			;A=32, blue
 		ld 	(VIDEO_REGS.COLOR),a
 		ld	a,#80			;obdelnik
 		jr	wu1
+; --- DOKUMENTACE CZ: wifi_unwait ---
+; Ucel: Zobrazí, resp. odstraní indikátor čekání na Wi-Fi.
+; Vstup: Bez parametrů.
+; Vystup: Aktualizovaný indikátor na obrazovce; AF obnoven.
+; Meni: Bez HGFX žádné; s HGFX HL a registry dle CHAR, AF zachován.
+; Poznamka: HGFX varianta mění VIDEO_REGS a obnovuje běžnou barvu/roviny.
+; --- KONEC DOKUMENTACE CZ ---
 wifi_unwait	push	af
 		call	wu2
 		ld	a,#20			;znak
@@ -6332,9 +7133,23 @@ wu2		ld	a,planar_wifi		;planar 5 (jen pro wifi wait/unwait)
 		ret
 
 	ELSE
+; --- DOKUMENTACE CZ: wifi_wait ---
+; Ucel: Zobrazí, resp. odstraní indikátor čekání na Wi-Fi.
+; Vstup: Bez parametrů.
+; Vystup: Aktualizovaný indikátor na obrazovce; AF obnoven.
+; Meni: Bez HGFX žádné; s HGFX HL a registry dle CHAR, AF zachován.
+; Poznamka: HGFX varianta mění VIDEO_REGS a obnovuje běžnou barvu/roviny.
+; --- KONEC DOKUMENTACE CZ ---
 wifi_wait	push	af
 		ld	a,15
 		jr	wifi_unwait1
+; --- DOKUMENTACE CZ: wifi_unwait ---
+; Ucel: Zobrazí, resp. odstraní indikátor čekání na Wi-Fi.
+; Vstup: Bez parametrů.
+; Vystup: Aktualizovaný indikátor na obrazovce; AF obnoven.
+; Meni: Bez HGFX žádné; s HGFX HL a registry dle CHAR, AF zachován.
+; Poznamka: HGFX varianta mění VIDEO_REGS a obnovuje běžnou barvu/roviny.
+; --- KONEC DOKUMENTACE CZ ---
 wifi_unwait	push	af
 		ld	a,7
 wifi_unwait1	ld	(23295),a
@@ -6348,6 +7163,14 @@ wifi_unwait1	ld	(23295),a
 ;mostly for usage in SM2.0
 ;INPUT=D=currently aligned speed. If D=255 continue with speed align, if 0-23 compare with
 ;speed you want to align, if same, do not continue.
+; --- DOKUMENTACE CZ: set_ud_speed ---
+; Ucel: Sjednotí rychlost UART a modulu na požadovaném indexu.
+; Vstup: set_ud_speed: (IX+2), hodnota 255 volí maximum; set_ud_speed_a: A=index. D=současný
+;   index nebo 255.
+; Vystup: UART a modul na požadované rychlosti, případně obsluha chyby.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Používá speed_table, TX_buf a konfigurační příznaky.
+; --- KONEC DOKUMENTACE CZ ---
 set_ud_speed
 		ld	a,(ix+2)
 		inc	a
@@ -6359,6 +7182,14 @@ set_mspeed_mbfw	ld	a,(ix+8)		;A=max speed allowed for given MBFW
 		jr	nz,set_ud_speed		;if 23, change it to 16 (max speed for module)
 		ld	a,16
 
+; --- DOKUMENTACE CZ: set_ud_speed_a ---
+; Ucel: Sjednotí rychlost UART a modulu na požadovaném indexu.
+; Vstup: set_ud_speed: (IX+2), hodnota 255 volí maximum; set_ud_speed_a: A=index. D=současný
+;   index nebo 255.
+; Vystup: UART a modul na požadované rychlosti, případně obsluha chyby.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Používá speed_table, TX_buf a konfigurační příznaky.
+; --- KONEC DOKUMENTACE CZ ---
 set_ud_speed_a	cp	24			;check if speed is within 0-23
 		ld	bc,33
 		jr	nc,suds5		;NC=speed >23, error
@@ -6443,8 +7274,25 @@ suds5		pop	hl
 ;A=1=C=c=1=error sending string
 ;A=2=C=c=11=error in module answer (expected answer ">" not returned)
 ;A=3=C=c=4=sent ok, but return code other than expected
+; --- DOKUMENTACE CZ: send_abort ---
+; Ucel: Odešle FTP příkaz ABOR prostřednictvím send_ftp_command.
+; Vstup: DE = očekávaný FTP návratový kód.
+; Vystup: Stejné rozhraní jako send_ftp_command.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; --- KONEC DOKUMENTACE CZ ---
 send_abort	xor	a
 		ld	hl,ftp_abor
+; --- DOKUMENTACE CZ: send_ftp_command ---
+; Ucel: Sestaví, odešle a vyhodnotí FTP příkaz na řídicím spojení.
+; Vstup: HL = příkaz, DE = očekávaný FTP kód; A=0 bez parametru, 1 parametr v INPBUFF, 2 nový
+;   vstup.
+; Vystup: NC a A=0 = očekávaná odpověď; C = chyba. HL = přijatý kód při vyhodnocené odpovědi.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Mění TX_buf/RX_buf; navazuje přímo na cipsend_request. Zrušení vstupu může obnovit
+;   zásobník a přejít do hlavní smyčky.
+; --- KONEC DOKUMENTACE CZ ---
 send_ftp_command
 		push	de		;DE=ftp code we expect
 		push	hl
@@ -6491,6 +7339,14 @@ sfc1		ld	hl,eol
 ;59);sends any data in ftp, eg. "AT+CIPSEND=0,6"+ "USER xy"
 ;data have to be prepared in TX_buf, must end with 0, returns ftp code in HL
 ;on input DE return code we ask about is on the stack!!
+; --- DOKUMENTACE CZ: cipsend_request ---
+; Ucel: Odešle TX_buf přes AT+CIPSEND a naváže na příjem FTP odpovědi.
+; Vstup: TX_buf = text zakončený nulou; očekávaný FTP kód již leží na vrcholu zásobníku.
+; Vystup: Viz send_ftp_command / receive_ftp_answer.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Interní pokračování, není určeno pro samostatné CALL bez přípravy zásobníku.
+; --- KONEC DOKUMENTACE CZ ---
 cipsend_request	ld	hl,at_cipsend	;send "AT+CIPSEND="
 		call	send_string
 		jr	nz,sfcerr1
@@ -6595,6 +7451,13 @@ chma1		dec	(ix+6)
 ;funkcni, hledame starou verzi
 ;IN=HL=string we look for in answer
 ;OUT=NC=all ok, C=error, string not found, vrací jen C/NC!!!
+; --- DOKUMENTACE CZ: check_module_answer ---
+; Ucel: Přijímá odpověď modulu a hledá očekávaný text.
+; Vstup: HL = nulou ukončený hledaný text.
+; Vystup: NC = text nalezen, C = nenalezen v neprázdné odpovědi.
+; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
+; Poznamka: Používá RX_buf. Prázdné odpovědi a zpráva busy opakují čtení bez celkového limitu.
+; --- KONEC DOKUMENTACE CZ ---
 check_module_answer				;new concept
 ;;;		ld	(ix+6),#10		;16x must be enough,timeout set to #FF (was only 2x repeats);bylo ;;;koko
 		push	hl			;string we look for
@@ -6719,8 +7582,24 @@ chma1		dec	(ix+6)
 ;OUT=error code 11=error in receiving answer "OK"
 ;OUT=prints ftp report on the screen (temporarily, in future I want to have 3 lines for ftp report)
 ;!!!!!toto se dá pouít na tisk chyb z ftp, pokud se vracíme s NC, pak v HL máme kod, ktery ftp vraci, muzeme je tisknout, zatim neimplementovano.
+; --- DOKUMENTACE CZ: receive_ftp_answer_isolated ---
+; Ucel: Přijme a vypíše FTP odpověď, porovná první kód s očekávaným.
+; Vstup: isolated: DE = očekávaný kód; interní vstup: očekávaný kód na vrcholu zásobníku.
+; Vystup: Při běžném dokončení HL=první kód, DE=druhý kód nebo 0; NC=shoda, C=jiný kód.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Mění RX_buf a výpis zpráv. Chyby transportu mohou přejít do error_handler.
+; --- KONEC DOKUMENTACE CZ ---
 receive_ftp_answer_isolated
 		push	de			;DE=code we expect
+; --- DOKUMENTACE CZ: receive_ftp_answer ---
+; Ucel: Přijme a vypíše FTP odpověď, porovná první kód s očekávaným.
+; Vstup: isolated: DE = očekávaný kód; interní vstup: očekávaný kód na vrcholu zásobníku.
+; Vystup: Při běžném dokončení HL=první kód, DE=druhý kód nebo 0; NC=shoda, C=jiný kód.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Mění RX_buf a výpis zpráv. Chyby transportu mohou přejít do error_handler.
+; --- KONEC DOKUMENTACE CZ ---
 receive_ftp_answer				;new concept
 ;		ld	(ix+6),2		;was 0	
 ;		push	hl			;HL=code number we want
@@ -6802,14 +7681,32 @@ rfa5		xor	a			;set A=0 and NC=all ok
 		
 
 ;62) clears RX and TX buffers, or only one of them
+; --- DOKUMENTACE CZ: clear_buffers ---
+; Ucel: Vynuluje oba komunikační buffery, resp. pouze RX nebo TX.
+; Vstup: Bez parametrů.
+; Vystup: Vybraný buffer je nulový; BC=0, HL/DE na konci kopírování.
+; Meni: F, BC, DE, HL; A, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 clear_buffers	ld	bc,buffers_len-1
 cb2		ld	hl,RX_buf
 		ld	de,RX_buf+1
 cb1		ld	(hl),0
 		ldir
 		ret
+; --- DOKUMENTACE CZ: clear_RX_buf ---
+; Ucel: Vynuluje oba komunikační buffery, resp. pouze RX nebo TX.
+; Vstup: Bez parametrů.
+; Vystup: Vybraný buffer je nulový; BC=0, HL/DE na konci kopírování.
+; Meni: F, BC, DE, HL; A, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 clear_RX_buf	ld	bc,buffers_len/2-1
 		jr	cb2			
+; --- DOKUMENTACE CZ: clear_TX_buf ---
+; Ucel: Vynuluje oba komunikační buffery, resp. pouze RX nebo TX.
+; Vstup: Bez parametrů.
+; Vystup: Vybraný buffer je nulový; BC=0, HL/DE na konci kopírování.
+; Meni: F, BC, DE, HL; A, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 clear_TX_buf	ld	hl,TX_buf
 		ld	de,TX_buf+1
 		ld	bc,buffers_len/2-1
@@ -6842,6 +7739,14 @@ clear_TX_buf	ld	hl,TX_buf
 ;error_handler=		displays error and jumps to error_handler_loop
 ;error_handler1=	only jumps to error handler loop
 
+; --- DOKUMENTACE CZ: error_handler ---
+; Ucel: Zobrazí chybu, ukončí čekání a vrátí řízení na nejvyšší úroveň.
+; Vstup: C = číslo chyby; inicializovaný hlavní zásobník.
+; Vystup: Nevrací se běžně volajícímu: SP nastaví na basic_end-2.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní. SP.
+; Poznamka: Obnovuje 3,5 MHz a vypíná pasivní příjem.
+; --- KONEC DOKUMENTACE CZ ---
 error_handler	call	display_error
 		call	wifi_unwait
 		call	set_3_5mhz
@@ -6853,6 +7758,13 @@ error_handler	call	display_error
 		ld 	sp,basic_end-2	;Busy's universal solution. Jump back to "error_handler_loop"
 		ret
 
+; --- DOKUMENTACE CZ: display_error ---
+; Ucel: Vypíše číslo chyby a počká na potvrzení klávesou.
+; Vstup: C = číslo chyby; IX = flag1.
+; Vystup: C (příznak) = 1; návrat volajícímu.
+; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
+; Poznamka: Mění bit 4 v (IX+0), block_asci a editační oblast.
+; --- KONEC DOKUMENTACE CZ ---
 display_error	set	4,(ix+0)	;PRINT again. Return back to from where you were called.
 		ld	h,0
 		ld	l,c		;C=error code
@@ -6902,6 +7814,13 @@ display_error	set	4,(ix+0)	;PRINT again. Return back to from where you were call
 ;64)
 ;connect to server, main text must be prepared in TX_buf, sends commands eg. "AT+CIPSTART=1,"192.168.112",21"
 ;OUT=NC=all ok, else error
+; --- DOKUMENTACE CZ: cipstart_connect ---
+; Ucel: Otevře TCP spojení pomocí AT+CIPSTART.
+; Vstup: TX_buf = argumenty za AT+CIPSTART= včetně CR/LF a nuly.
+; Vystup: NC = nalezena odpověď CONNECT; C = neúspěšná odpověď.
+; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
+; Poznamka: Chyba odeslání odchází do error_handler.
+; --- KONEC DOKUMENTACE CZ ---
 cipstart_connect
 		ld	hl,cipstart		;make connection to server
 		call	send_string		;send "AT+CIPSTART="
@@ -6920,6 +7839,14 @@ cs_con_buf	ld	hl,TX_buf		;send it
 ;65)
 ;sends PASV command to ftp server+ sends connection command "AT+CIPSTART=1,"TCP","h1,h2,h3,h4",port"
 ;OUT=C=success
+; --- DOKUMENTACE CZ: enter_passive_mode ---
+; Ucel: Pošle PASV, z odpovědi 227 sestaví IP/port a otevře datové spojení 1.
+; Vstup: Přihlášené řídicí FTP spojení; IX = flag1.
+; Vystup: NC = datové spojení otevřeno; neúspěch zpracuje error_handler.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Mění RX_buf, TX_buf, block_asci a počitadlo (IX+6).
+; --- KONEC DOKUMENTACE CZ ---
 enter_passive_mode
 		ld	hl,ftp_pasv
 		xor	a			;A=0=command only
@@ -7031,6 +7958,13 @@ epm4		ld	c,9
 ;66)
 ;inputs character. OUT=C=length of input string, HL= start of string=INPBUFF
 ;OUT=NZ=data inputed, Z=abort pressed, A=4
+; --- DOKUMENTACE CZ: input_line ---
+; Ucel: Načte uživatelský řádek s limitem editoru 64 znaků.
+; Vstup: Bez registrů parametrů; využívá INPUT a INPBUFF.
+; Vystup: NZ = neprázdný vstup, HL=INPBUFF, BC=délka bez koncových mezer; Z = zrušeno nebo
+;   prázdný vstup.
+; Meni: AF, BC, HL a registry dle INPUT; IX je explicitně zachován.
+; --- KONEC DOKUMENTACE CZ ---
 input_line	push	ix
 		ld	ixh,64
 		call	INPUT
@@ -7044,6 +7978,13 @@ input_line	push	ix
 		ret	z			;Z=cursor was 0
 ;		jp	z,error_handler
 
+; --- DOKUMENTACE CZ: input_l_count ---
+; Ucel: Určí délku INPBUFF po odstranění koncových mezer a nul.
+; Vstup: INPBUFF = připravený text v 255bajtovém poli.
+; Vystup: HL=INPBUFF, B=0, C=délka.
+; Meni: AF, BC, HL; případný vstup přes input_line má jeho vedlejší účinky.
+; Poznamka: Skenuje odzadu; předpokládá, že narazí na neprázdný znak.
+; --- KONEC DOKUMENTACE CZ ---
 input_l_count	ld	hl,INPBUFF+254		;username
 		ld	bc,255		
 
@@ -7061,6 +8002,13 @@ il2		ld	hl,INPBUFF
 		jr	z,input_line	;empty line inserted, try again
 		ret
 
+; --- DOKUMENTACE CZ: clear_inp_buf ---
+; Ucel: Vyplní 255 bajtů vstupního bufferu mezerami.
+; Vstup: Bez parametrů.
+; Vystup: HL=INPBUFF+255, B=0.
+; Meni: B, HL; AF, C, DE, IX a IY zachovány.
+; Poznamka: Nezapisuje nulový terminátor.
+; --- KONEC DOKUMENTACE CZ ---
 clear_inp_buf	ld   hl,INPBUFF
 	        ld   b,255
 cib		ld   (hl),32
@@ -7071,6 +8019,13 @@ cib		ld   (hl),32
 
 
 ;68) sends purely AT+CIPSEND=1,data length
+; --- DOKUMENTACE CZ: cipsend_lod ---
+; Ucel: Požádá modul o odeslání uploadového bloku na spojení 1.
+; Vstup: ftp_upl_len = délka připraveného bloku.
+; Vystup: NC = modul je připraven přijmout data; C = výzva nebyla nalezena.
+; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
+; Poznamka: Sestavuje AT+CIPSEND=1,délka; používá TX_buf a block_asci.
+; --- KONEC DOKUMENTACE CZ ---
 cipsend_lod	ld	hl,at_cipsend	;send "AT+CIPSEND="
 		call	send_string
 		jp	nz,cr_err
@@ -7132,6 +8087,13 @@ cipsend_lod	ld	hl,at_cipsend	;send "AT+CIPSEND="
 ;		ret
 
 ;69) display_progress	prints length of file each time file is loaded/saved, length taken from rest_len
+; --- DOKUMENTACE CZ: display_progress ---
+; Ucel: Vypíše počet zbývajících bajtů přenosu.
+; Vstup: rest_len = 32bitový počet zbývajících bajtů.
+; Vystup: Aktualizovaný ukazatel průběhu.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Kopíruje rest_len do zzbin; převod mění zzbin a zzdec.
+; --- KONEC DOKUMENTACE CZ ---
 display_progress
 		ld	hl,txt_adr_progress+10
 		push	hl
@@ -7157,6 +8119,14 @@ dp0		inc	de
 ;!!!! in active mode returns eg: +IPD,0,25:331 Password required....
 ;!!!! in passive mode returnseg: +IPD,0,11. 11 bytes data then have to be fetched with AT+CIPRECVDATA=0,11.!!!
 
+; --- DOKUMENTACE CZ: look_for_ipd ---
+; Ucel: Najde a zpracuje hlavičku +IPD v aktivním příjmu.
+; Vstup: Příchozí UART data ve formátu +IPD,kanál,délka:.
+; Vystup: NC = A číslo kanálu, HL délka; C = chyba, C (registr) číslo chyby.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Po úspěchu je další čtený bajt začátkem užitečných dat; mění RX_buf a (IX+6).
+; --- KONEC DOKUMENTACE CZ ---
 look_for_ipd	ld	(ix+6),3		;(was 0), 3 attempts for each search
 		call	clear_RX_buf
 lfi7		ld	hl,ipd			;"+IPD,"
@@ -7215,6 +8185,12 @@ lfi1		pop	de			;HL=RX_buf
 
 
 ;73)prints status of URL and login
+; --- DOKUMENTACE CZ: print_ftp_status ---
+; Ucel: Vypíše stav přihlášení a aktuální server.
+; Vstup: current_login, current_host.
+; Vystup: Aktualizované stavové řádky.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 print_ftp_status
 		ld	de,logged_in
 		ld	hl,txt_adr_speed_login+12
@@ -7234,6 +8210,13 @@ print_ftp_status
 
 ;74) send "noop" command
 ;OUT=NC="noop" successfuly accepted, all ok
+; --- DOKUMENTACE CZ: send_noop ---
+; Ucel: Ověří a udržuje FTP spojení příkazem NOOP.
+; Vstup: Aktivní řídicí spojení.
+; Vystup: NC = server odpověděl 200; jinak viz send_ftp_command.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; --- KONEC DOKUMENTACE CZ ---
 send_noop	xor	a
 		ld	hl,ftp_noop		;send NOOP command
 		ld	de,200			;ftp code we accept
@@ -7253,6 +8236,12 @@ pu		jp	clear_edit_zone
 */
 
 ;76) OUT= print Transfer OK, or error, or aborted, or incomplete
+; --- DOKUMENTACE CZ: print_transfer_status ---
+; Ucel: Vypíše výsledek přenosu a čeká na potvrzení.
+; Vstup: (IX+23): 0=úspěch, 1=zrušeno, 2=chyba, 3=neúplné.
+; Vystup: Po potvrzení vymaže editační oblast.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 print_transfer_status
 		call	clear_edit_zone
 		ld	de,transfer
@@ -7284,6 +8273,13 @@ pts1		call	akey
 
 ;78)prints ftp message on the screen
 ;IN=HL=start address of message to print
+; --- DOKUMENTACE CZ: print_ftp_message ---
+; Ucel: Posune historii a vypíše text odpovědi FTP serveru.
+; Vstup: HL = začátek zprávy.
+; Vystup: Aktualizovaná oblast serverových zpráv.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Zpracování řádků se liší pro klasickou a HGFX obrazovku.
+; --- KONEC DOKUMENTACE CZ ---
 print_ftp_message
 		push	hl			;HL=start address of message to print
 
@@ -7420,6 +8416,13 @@ rfa_prn2	ld	hl,txt_adr_ftp_reports
 
 
 ;79) connect to FTP server
+; --- DOKUMENTACE CZ: connect_to_ftp_server ---
+; Ucel: Sestaví adresu a port serveru a otevře řídicí spojení.
+; Vstup: host_url (případně s :port), ftp_port; IX = flag1.
+; Vystup: Otevřené spojení, případně obsluha chyby.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Sestavuje parametry v TX_buf a zpracovává úvodní serverovou odpověď.
+; --- KONEC DOKUMENTACE CZ ---
 connect_to_ftp_server
 		call	wifi_wait
 		ld	de,TX_buf		;prepare connection command to RX_buf
@@ -7506,8 +8509,20 @@ server_connection_error
 		ld	de,ftp_con_err
 		call	print_ez1
 		call	akey
+; --- DOKUMENTACE CZ: clear_ini_keyl ---
+; Ucel: Obnoví hlavní zásobník a opustí aktuální obsluhu vstupu.
+; Vstup: Inicializovaný hlavní program.
+; Vystup: Přechod na hlavní úroveň; bez návratu na původní místo.
+; Meni: SP; vstup clear_ini_keyl také registry dle clear_edit_zone.
+; --- KONEC DOKUMENTACE CZ ---
 clear_ini_keyl	call	clear_edit_zone
 ;		jp	error_handler1		;ends in a loop, if connection not sucessuful
+; --- DOKUMENTACE CZ: initsp_keyloop ---
+; Ucel: Obnoví hlavní zásobník a opustí aktuální obsluhu vstupu.
+; Vstup: Inicializovaný hlavní program.
+; Vystup: Přechod na hlavní úroveň; bez návratu na původní místo.
+; Meni: SP; vstup clear_ini_keyl také registry dle clear_edit_zone.
+; --- KONEC DOKUMENTACE CZ ---
 initsp_keyloop	ld	sp,basic_end-2
 		jp	key_loop
 
@@ -7539,6 +8554,12 @@ fl21		pop	bc			;BC=length to be serached
 		jr	fl21
 
 ;80) for login and auto login purposes, OUT=Z=old connection same as new, NZ=proceed to connection
+; --- DOKUMENTACE CZ: test_ftp_connection ---
+; Ucel: Porovná požadovaný a současný server, případně nabídne odpojení.
+; Vstup: host_url, current_host a příznaky spojení.
+; Vystup: Z = zachovat stávající spojení; NZ = pokračovat novým připojením.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 test_ftp_connection
 		ld	bc,#80
 		ld	hl,current_host
@@ -7572,6 +8593,12 @@ ret2main_scr	call	passive_receive_off	;hope, it does not affect other routines
 		jp	clear_edit_zone	;clear 2 bottom lines
 ;		jp	key_loop
 
+; --- DOKUMENTACE CZ: logoff_current ---
+; Ucel: Uzavře stávající spojení modulu před připojením k jinému serveru.
+; Vstup: Aktivní konfigurace Wi-Fi.
+; Vystup: Po úspěchu NZ; chyba odeslání přes cr_err.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 logoff_current				;end current session
 		call	ftp_quit_connection	;send QUIT command
 		ld	hl,at_cipclose5
@@ -7583,13 +8610,31 @@ logoff_current				;end current session
 		inc	b			;set NZ
 		ret
 ;80,5)
+; --- DOKUMENTACE CZ: set_7mhz ---
+; Ucel: Nastaví frekvenci CPU na 3,5 / 7 / 20 MHz podle zvoleného vstupu.
+; Vstup: Bez parametrů.
+; Vystup: Zapsána volba frekvence na porty #783B/#793B.
+; Meni: AF, BC, L; H, DE, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 set_7mhz
 		ld	a,1
 		jr	s20
 ;81)
+; --- DOKUMENTACE CZ: set_3_5mhz ---
+; Ucel: Nastaví frekvenci CPU na 3,5 / 7 / 20 MHz podle zvoleného vstupu.
+; Vstup: Bez parametrů.
+; Vystup: Zapsána volba frekvence na porty #783B/#793B.
+; Meni: AF, BC, L; H, DE, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 set_3_5mhz	xor	a			;0=3,5Mhz, 1=7Mhz, 2=14Mhz, 3=20Mhz
 		jr	s20
 ;82)
+; --- DOKUMENTACE CZ: set_20mhz ---
+; Ucel: Nastaví frekvenci CPU na 3,5 / 7 / 20 MHz podle zvoleného vstupu.
+; Vstup: Bez parametrů.
+; Vystup: Zapsána volba frekvence na porty #783B/#793B.
+; Meni: AF, BC, L; H, DE, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 set_20mhz	ld	a,3
 s20		ld	bc,#783B
 		ld	l,#30
@@ -7604,6 +8649,13 @@ s20		ld	bc,#783B
 ;		ret			;pozor, 2xRET= bezpecny navrat z rutiny. Obcas se RET preskoci a jede se dal!!!! Az to LMN vyresi, tak vymazat ten jeden RET
 
 ;83) IN=HL=command, C=including parameter, NC= command only
+; --- DOKUMENTACE CZ: send_ftp_command_in_passive_mode ---
+; Ucel: Odešle FTP příkaz používaný při pasivním přenosu dat.
+; Vstup: HL=příkaz; C (příznak)=připojit parametr z INPBUFF, NC=bez parametru.
+; Vystup: Odeslaný příkaz a vyhodnocená odpověď; stav přenosu v příznacích.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Používá TX_buf/RX_buf a transfer_flag.
+; --- KONEC DOKUMENTACE CZ ---
 send_ftp_command_in_passive_mode
 		ld	de,TX_buf
 ;		ld	bc,5
@@ -7819,12 +8871,36 @@ sfcip2		ld	(ix+23),2	;transfer error (but code 226 can come later with longer fi
 ;84)
 ;find out, if module has available data, OUT=NZ=data available, HL=always valid length of data (either #800 or less), DE=always max data length (#800 given by download_length)
 ;OUT=Z=HL=0=data not available
+; --- DOKUMENTACE CZ: data_available_in_module ---
+; Ucel: Zjistí délku dat čekajících v modulu pomocí AT+CIPRECVLEN?.
+; Vstup: Aktivní pasivní příjem; IX = flag1.
+; Vystup: NZ = HL dostupná délka omezená download_length; Z a HL=0 = bez dat.
+; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
+; Poznamka: Varianta dir (také základní vstup) používá #20 pokusů, file #80. DE není zaručený
+;   limit: při datech drží zjištěnou délku.
+; --- KONEC DOKUMENTACE CZ ---
 data_available_in_module
 ;		ld	(ix+6),#5		;5 attempts, increased to #20, seem to help, 0.97- #20 increased to #80
 						;was #80, <5= file download returns error 26, the less the quicker directopry retrieve.
+; --- DOKUMENTACE CZ: data_available_in_module_dir ---
+; Ucel: Zjistí délku dat čekajících v modulu pomocí AT+CIPRECVLEN?.
+; Vstup: Aktivní pasivní příjem; IX = flag1.
+; Vystup: NZ = HL dostupná délka omezená download_length; Z a HL=0 = bez dat.
+; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
+; Poznamka: Varianta dir (také základní vstup) používá #20 pokusů, file #80. DE není zaručený
+;   limit: při datech drží zjištěnou délku.
+; --- KONEC DOKUMENTACE CZ ---
 data_available_in_module_dir
 		ld	a,#20			;for dir 5 repetitions should be enough
 		jr	dam6
+; --- DOKUMENTACE CZ: data_available_in_module_file ---
+; Ucel: Zjistí délku dat čekajících v modulu pomocí AT+CIPRECVLEN?.
+; Vstup: Aktivní pasivní příjem; IX = flag1.
+; Vystup: NZ = HL dostupná délka omezená download_length; Z a HL=0 = bez dat.
+; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
+; Poznamka: Varianta dir (také základní vstup) používá #20 pokusů, file #80. DE není zaručený
+;   limit: při datech drží zjištěnou délku.
+; --- KONEC DOKUMENTACE CZ ---
 data_available_in_module_file		
 		ld	a,#80			;for sucessful file download we need more than for dir, theoretically can be
 dam6		ld	(ix+6),a		;instant repetiotion, bacuse download is not called if file is not completed
@@ -7874,6 +8950,14 @@ dam3		dec	(ix+6)			;HL=max length of data available in module buffer
 		ret
 
 ;85) ask_for_data_in_passive_mode		;send "AT+CIPRECVDATA=1,2048" in passive receive mode
+; --- DOKUMENTACE CZ: ask_for_data_in_passive_mode ---
+; Ucel: Vyžádá blok ze spojení 1 a přečte jeho délku před dvojtečkou.
+; Vstup: BC = požadovaný počet bajtů.
+; Vystup: HL a rest_chunk = délka oznámená modulem; užitečná data zbývá přečíst.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Sestavuje AT+CIPRECVDATA=1,délka; mění block_asci a rest_chunk.
+; --- KONEC DOKUMENTACE CZ ---
 ask_for_data_in_passive_mode
 		push	bc			;BC=rest_chunk
 		ld	(rest_chunk),bc
@@ -7961,6 +9045,14 @@ afdipm4		scf
 */
 	
 ;86) ask_for_reply_in_passive_mode		;send "AT+CIPRECVDATA=1,128" in pasive receive mode
+; --- DOKUMENTACE CZ: ask_for_reply_in_passive_mode ---
+; Ucel: Vyžádá a zpracuje FTP odpověď z řídicího spojení 0.
+; Vstup: Pasivní příjem; IX = flag1.
+; Vystup: HL = první FTP kód, DE = druhý kód nebo 0.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Používá TX_buf, RX_buf a (IX+6); transportní chyby řeší error_handler.
+; --- KONEC DOKUMENTACE CZ ---
 ask_for_reply_in_passive_mode
 ;OUT=HL=code 1, DE=code 2 or 0 if code 2 not present
 		ld	(ix+6),4	;4 attempts
@@ -8069,13 +9161,34 @@ afr1		pop	de
 		ret
 
 ;77) turn off passive recieve mode
+; --- DOKUMENTACE CZ: passive_receive_off ---
+; Ucel: Zapne/vypne pasivní příjem ESP pomocí AT+CIPRECVMODE.
+; Vstup: Vstup switch: A = ASCII '0' nebo '1'; ostatní vstupy jej nastaví.
+; Vystup: NC při potvrzení OK; chyba přechází do error_handler.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Do recvmode ukládá ASCII znak, nikoli binární 0/1; mění TX_buf.
+; --- KONEC DOKUMENTACE CZ ---
 passive_receive_off
 		ld	a,"0"		;recvmode=0
 		jr	passive_receive_switch
 
 ;87) turn on passive receive mode
+; --- DOKUMENTACE CZ: passive_receive_on ---
+; Ucel: Zapne/vypne pasivní příjem ESP pomocí AT+CIPRECVMODE.
+; Vstup: Vstup switch: A = ASCII '0' nebo '1'; ostatní vstupy jej nastaví.
+; Vystup: NC při potvrzení OK; chyba přechází do error_handler.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Do recvmode ukládá ASCII znak, nikoli binární 0/1; mění TX_buf.
+; --- KONEC DOKUMENTACE CZ ---
 passive_receive_on
 		ld	a,"1"		;recvmode=1
+; --- DOKUMENTACE CZ: passive_receive_switch ---
+; Ucel: Zapne/vypne pasivní příjem ESP pomocí AT+CIPRECVMODE.
+; Vstup: Vstup switch: A = ASCII '0' nebo '1'; ostatní vstupy jej nastaví.
+; Vystup: NC při potvrzení OK; chyba přechází do error_handler.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Do recvmode ukládá ASCII znak, nikoli binární 0/1; mění TX_buf.
+; --- KONEC DOKUMENTACE CZ ---
 passive_receive_switch
 		ld	(recvmode),a
 		ld	hl,TX_buf
@@ -8103,6 +9216,13 @@ passive_receive_switch
 ;		ret			;no need to solve, module responses are the same not depending on receive mode
 
 ;88) print working directory+ copy it to memory
+; --- DOKUMENTACE CZ: print_working_directory ---
+; Ucel: Vyžádá PWD, z odpovědi vybere cestu a vytiskne ji.
+; Vstup: Aktivní FTP spojení; IX = flag1.
+; Vystup: Cesta na horních řádcích obrazovky.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; Poznamka: Mění RX_buf včetně terminátoru za cestou; neukládá trvalou kopii do ftp_path.
+; --- KONEC DOKUMENTACE CZ ---
 print_working_directory
 ;;;koko		
 		call	clear_rece_buf
@@ -8183,6 +9303,14 @@ pwd1
 ;OUT=A=3= item not parsed (for the moment) bacause it is LIST in full, HL, BC irrelevant
 ;OUT=A=4= starting item ".."
 ;bits 1 (items 0=abbreviated, 1= full) and 3 (current command type 0=LIST, 1=NLST) from flag_dir are of interest here
+; --- DOKUMENTACE CZ: get_item_name ---
+; Ucel: Rozebere aktuální položku adresáře a vrátí jméno a typ.
+; Vstup: cur_item_addr/cur_item_addr_page; IX=flag1; vstupní Carry se nevyužívá.
+; Vystup: HL=jméno, BC=délka, item_name_page=banka; DE=16bitová velikost u zkráceného LIST.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: A: 0 adresář, 1 soubor, 2 NLST (typ neznámý), 3 plný LIST/chybná položka, 4
+;   syntetické ..; pro A=3 nejsou HL/BC obecně platné.
+; --- KONEC DOKUMENTACE CZ ---
 get_item_name
 ;128K bank-safe parser.
 ;IN: callers currently use SCF; C/NC is kept only for source compatibility.
@@ -8393,6 +9521,13 @@ gfn_digit db 0
 
 
 ;90)
+; --- DOKUMENTACE CZ: print_dir_files_items ---
+; Ucel: Vypíše počet adresářů/souborů nebo celkový počet položek NLST.
+; Vstup: dir_counter, item_file_count; bit 3 v (IX+1).
+; Vystup: Aktualizovaná statistika adresáře.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; Poznamka: Používá block_asci; HGFX obnovuje barvu a roviny pro tisk.
+; --- KONEC DOKUMENTACE CZ ---
 print_dir_files_items			;after dir having been read, it prints number of items or dirs and files
 		call	cls_dir_files
 
@@ -8443,6 +9578,12 @@ pdfi2		pop	de		;DE=block_asci
 		jp	set_hgfx_ink_planar
 	ENDIF
 
+; --- DOKUMENTACE CZ: cls_dir_files ---
+; Ucel: Vymaže oblast se statistikou adresáře vypsáním mezer.
+; Vstup: Bez parametrů.
+; Vystup: Vymazaná oblast od txt_adr_dir_info.
+; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 cls_dir_files	ld	de,spaces
 		ld	hl,txt_adr_dir_info
 		push	de
@@ -8451,6 +9592,13 @@ cls_dir_files	ld	de,spaces
 		jp	PRINT
 
 ;91)
+; --- DOKUMENTACE CZ: search_marked_items ---
+; Ucel: Najde aktuální nebo následující označenou položku.
+; Vstup: cur_item_addr a cur_item_addr_page = výchozí položka.
+; Vystup: NZ = nalezená označená položka, Z = konec; ukazatele se posouvají.
+; Meni: AF, BC, DE, HL; IX a IY zachovány.
+; Poznamka: Mění aktuální pozici a mapování RAM.
+; --- KONEC DOKUMENTACE CZ ---
 search_marked_items
 ;Search forward for the next marked item.
 ;IN/OUT: cur_item_addr + cur_item_addr_page
@@ -8472,6 +9620,13 @@ smi1		call	DIR128_CUR_LENGTH_DE
 
 
 ;92)
+; --- DOKUMENTACE CZ: un_mark_all ---
+; Ucel: Označí nebo odznačí všechny skutečné položky adresáře.
+; Vstup: C (příznak)=odznačit, NC=označit; IX = flag1.
+; Vystup: Aktualizované bity označení a mark_counter; původní pozice adresáře obnovena.
+; Meni: AF, BC, DE, HL, AF', HL'; IX a IY zachovány.
+; Poznamka: Vynechává syntetickou položku ..; obnoví také banku původní položky.
+; --- KONEC DOKUMENTACE CZ ---
 un_mark_all
 ;Mark/unmark all real items.
 ;IN: C=unmark, NC=mark
@@ -8526,9 +9681,25 @@ ua_done
 
 ;93)
 ;IN=A="A" for ASCCI (directory) or "I" for binary (files)
+; --- DOKUMENTACE CZ: send_type_command_a ---
+; Ucel: Nastaví FTP TYPE A pro adresář, resp. TYPE I pro binární soubory.
+; Vstup: Aktivní FTP spojení; IX = flag1.
+; Vystup: Návrat při očekávaném kódu 200; chyba přes error_handler.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Přepisuje INPBUFF parametrem A nebo I.
+; --- KONEC DOKUMENTACE CZ ---
 send_type_command_a
 		ld	a,"A"
 		jr	stc1
+; --- DOKUMENTACE CZ: send_type_command_i ---
+; Ucel: Nastaví FTP TYPE A pro adresář, resp. TYPE I pro binární soubory.
+; Vstup: Aktivní FTP spojení; IX = flag1.
+; Vystup: Návrat při očekávaném kódu 200; chyba přes error_handler.
+; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
+;   rozhraní.
+; Poznamka: Přepisuje INPBUFF parametrem A nebo I.
+; --- KONEC DOKUMENTACE CZ ---
 send_type_command_i
 		ld	a,"I"
 stc1		call	clear_inp_buf
@@ -8542,6 +9713,12 @@ stc1		call	clear_inp_buf
 		jp	error_handler		
 
 ;94)
+; --- DOKUMENTACE CZ: print_whole_screen ---
+; Ucel: Překreslí obrazovku včetně menu, nastavení a nadpisu/cesty.
+; Vstup: IX = flag1; bit 0 v (IX+1) určuje dostupnost adresáře.
+; Vystup: Obnovené zobrazení; při dostupném adresáři vyžádá cestu pomocí PWD.
+; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
+; --- KONEC DOKUMENTACE CZ ---
 print_whole_screen
 		call	cls_4000
 
@@ -8564,6 +9741,12 @@ pws1		jp	print_title
 
 	IFDEF hgfx64x24
 ;95) set_fdma_to_chars	
+; --- DOKUMENTACE CZ: set_fdma_to_chars ---
+; Ucel: Nastaví FDMA pro vykreslování osmibajtových znaků.
+; Vstup: Bez parametrů.
+; Vystup: FD_Copy=1, FD_Mod=63, F_Len=8; A=0, Z, NC.
+; Meni: AF, DE, HL; BC, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 set_fdma_to_chars
 	push	bc
 	ld	hl,1	;1 bajt zkopiruj
@@ -8572,6 +9755,13 @@ set_fdma_to_chars
 	jr	sftc1
 
 ;96)
+; --- DOKUMENTACE CZ: set_fdma_to_fill_len_in_bc_512 ---
+; Ucel: Nastaví FDMA pro souvislou výplň 512 bajtů.
+; Vstup: Bez parametru délky: BC se pouze uchovává.
+; Vystup: FD_Copy=0, FD_Mod=0, F_Len=512; HL=DE=0, A=0, Z, NC.
+; Meni: AF, DE, HL; BC, IX a IY zachovány.
+; Poznamka: Přes historický název a komentář se délka z BC nepoužívá.
+; --- KONEC DOKUMENTACE CZ ---
 set_fdma_to_fill_len_in_bc_512
 ;IN=BC=length
 	push	bc
@@ -8588,6 +9778,12 @@ sftc1	ld	(FDMAreg.FD_Copy),hl	;...a 63 pøeskoè.
 	ret	
 
 ;97)
+; --- DOKUMENTACE CZ: set_hgfx_ink_planar ---
+; Ucel: Obnoví barvu a bitové roviny pro běžný tisk HGFX.
+; Vstup: Bez parametrů.
+; Vystup: VIDEO_REGS.COLOR=4, VIDEO_REGS.MASK=planar_pismo.
+; Meni: A; F, BC, DE, HL, IX a IY zachovány.
+; --- KONEC DOKUMENTACE CZ ---
 set_hgfx_ink_planar
 		ld 	a,4			;vrat puvodni
 		ld 	(VIDEO_REGS.COLOR),a
@@ -8954,6 +10150,13 @@ bios_len	equ $-bios_start
 ;   bit 5 musi zustat 0, jinak se strankovani zamkne
 ; ------------------------------------------------------------
 
+; --- DOKUMENTACE CZ: PAGE128 ---
+; Ucel: Přepne horní 16KB okno paměti ZX Spectrum 128.
+; Vstup: A = číslo banky 0–7 (použijí se spodní tři bity).
+; Vystup: A = hodnota zapsaná na #7FFD a do PAGE128_STATE.
+; Meni: AF; BC, DE, HL, IX a IY zachovány.
+; Poznamka: Volí 48K ROM, obrazovku v RAM 5; bit zámku stránkování nechává nulový.
+; --- KONEC DOKUMENTACE CZ ---
 PAGE128:
         and     %00000111
         or      %00010000
