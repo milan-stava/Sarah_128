@@ -1,0 +1,231 @@
+Nezapomeň že ZX128 můžeš použít jen stránky 1,3,4,6,7.
+
+0	ROM
+#4000	page 5 /screen0
+#8000	page 2
+#c000	page 0
+
+Adresář nyní= #6800/26624 b- sdílená pamět i pro download
+Program nyní= #3800/14336 b
+
+
+celkem k použití je 6 stránek: 0,1,3,4,6,7
+
+Nově:
+
+ADRESÁŘ
+*******
+3 strany=49152 b
+0,1,3
+
+
+DOWNLOAD
+********
+1 STRANA= 16384 b
+4 (v případě pomalého sejvu věnovat i stranu 7, ale sejv musí být pod #8000)
+
+
+PROGRAM
+*******
+2 strana=16384 b
+6
+5 #6000-#7FFF=#2000=8192 b
+
+ale celkem
+#6000-#bfff=#6000/24576 b+ strana 6=#4000/16384 b= celkem #A000/40960 b.
+
+
+
+
+VOLNÁ/REZERVOVÁNO
+*****************
+strana 7
+
+nyní 14336
+minus:
+font=			1792 b
+print/input/keys=	1109 b
+celkem			2901 b
+
+14336-2901= 11435 by kod zabral.
+
+Zhodnoceni od AI:
+
+ahoj znáš Sáru, můj ftp klient, že? Nyní program funguje od adresy 51200 po 65535, dole od 24576 po 51199 je buffer pro adresár a stažený soubor. Tato koncepce již pamětove nedostacuje. Tak chci zapracovat na verzi 128K, kde mohu pouzit stranky 128K, koncept je zde, mrkni na něj, je to ok? udelal bys neco jinak?
+
+Ahoj Hoode, ano, SARAH znám. Základní myšlenka konceptu je správná a rozdělení stránek dává smysl. Je tam ale jedna zásadní věc: kód, který přepíná stránky a pracuje s přenosem dat, nesmí být umístěný ve stránce 6 na adrese #C000–#FFFF, protože při přepnutí na adresář nebo download by sám zmizel.
+
+Co je v konceptu správně
+
+Po nastavení CLEAR 24575 lze stabilní paměť chápat takto:
+
+Adresy	Fyzická RAM	Použití
+#4000–#5AFF	stránka 5	hlavní obrazovka
+#5B00–#5FFF	stránka 5	atributy, systémové proměnné a rezerva
+#6000–#7FFF	stránka 5	8 KB stabilní RAM
+#8000–#BFFF	stránka 2	16 KB stabilní RAM
+#C000–#FFFF	přepínaná	stránky 0, 1, 3, 4, 6 nebo 7
+
+Tedy skutečně:
+
+stabilní prostor pro program pod #C000: 24 576 B
+jedna programová stránka 6: 16 384 B
+celkem potenciálně pro program: 40 960 B
+
+Výpočet v konceptu tedy sedí. Jen formulace, že #6000–#BFFF je stránka 5, není přesná:
+
+#6000–#7FFF je stránka 5,
+#8000–#BFFF je stránka 2.
+Zásadní architektonické pravidlo
+
+Navrhl bych program rozdělit takto:
+
+Stabilní jádro: #6000–#BFFF
+
+Tady musí být vše, co musí fungovat během libovolně nastavené stránky:
+
+přepínání stránek přes port #7FFD,
+příjem dat z ESP,
+obsluha UARTu,
+parser +IPD,
+detekce CLOSED,
+FTP stavový automat, pokud během něj přicházejí data,
+kopírování dat do adresářových/download bufferů,
+ukládání staženého souboru,
+případná obsluha přerušení,
+zásobník,
+informace o aktuální stránce,
+malé pomocné buffery pro fragmentované hlavičky.
+
+To je nejdůležitější změna proti současné SARAH, která běží od #C800.
+
+Přepínaná stránka 6: #C000–#FFFF
+
+Sem může přijít kód, který se vykonává jen tehdy, když je nastavena stránka 6:
+
+vyšší logika GUI,
+obrazovky a dialogy,
+méně často používané funkce,
+nápověda,
+texty,
+overlaye.
+
+Jakmile kód ze stránky 6 zavolá operaci s adresářem nebo downloadem, musí přejít do rutiny pod #C000. Ta:
+
+zapamatuje aktuální stránku,
+nastaví stránku s daty,
+provede operaci,
+vrátí stránku 6,
+teprve potom se vrátí do kódu na #C000–#FFFF.
+
+Nelze přepnout stránku například z 6 na 1 a pokračovat v provádění rutiny na adrese #C000, protože by se v tu chvíli vykonával obsah stránky 1.
+
+Navržené rozdělení stránek
+
+Tvoje rozdělení bych v zásadě ponechal:
+
+Stránka	Účel	Kapacita
+0	adresář, část 1	16 KB
+1	adresář, část 2	16 KB
+3	adresář, část 3	16 KB
+4	download buffer A	16 KB
+6	programový overlay	16 KB
+7	rezerva / download buffer B	16 KB
+
+Adresář tak dostane 48 KB, což je výrazný posun proti současným 26 624 B.
+
+Stránku 7 bych zatím opravdu nechal rezervovanou. Později se může použít jako druhý download buffer:
+
+ESP → buffer A → SAVE
+      buffer B ← ESP
+
+Zatímco se ukládá obsah jedné stránky, druhá může přijímat další data. To bude užitečné, pouze pokud lze příjem a zápis skutečně prokládat; jinak druhý buffer jen zvýší maximální jednorázovou zásobu na 32 KB.
+
+Download by neměl mít limit 16 KB
+
+Stránku 4 bych nechápal jako prostor pro celý stažený soubor, ale jako průběžný buffer.
+
+Doporučený princip:
+
+ESP naplní část nebo celou stránku 4.
+SARAH ji uloží do cílového souboru.
+Buffer se uvolní.
+Pokračuje příjem další části.
+
+Pak může mít soubor prakticky libovolnou délku, kterou podporuje cílové úložiště. Stránka 7 může později umožnit double buffering.
+
+Jinak by nová SARAH měla stále maximální velikost downloadu pouze 16 KB, případně 32 KB se stránkou 7, což by byla škoda.
+
+Přístup k 48KB adresáři
+
+Nedoporučuji, aby zbytek programu držel přímé ukazatele #C000–#FFFF, protože po přepnutí stránky stejná adresa ukazuje na jiná data.
+
+Lepší je adresář chápat jako jeden logický blok o délce 49 152 B:
+
+offset 0–16383       → stránka 0
+offset 16384–32767   → stránka 1
+offset 32768–49151   → stránka 3
+
+Uděláme společné rutiny například:
+
+DIR_READ_BYTE
+DIR_WRITE_BYTE
+DIR_GET_ENTRY
+DIR_APPEND_DATA
+DIR_SELECT_BANK
+
+Převod může používat tabulku stránek 0, 1, 3. GUI potom nebude potřebovat vědět, ve které fyzické stránce konkrétní položka leží.
+
+Stejně bych zajistil, aby jeden záznam adresáře nepřetékal přes hranici stránky, nebo aby přístupová rutina uměla takové přetečení bezpečně obsloužit.
+
+Pozor na LIST delší než 48 KB
+
+Tři stránky problém výrazně oddálí, ale principiálně ho neodstraní. FTP LIST nemá předem známou délku.
+
+Máme několik možností:
+
+při zaplnění 48 KB příjem ukončit a oznámit „directory too large“;
+ukládat jen strukturované údaje potřebné pro zobrazení, nikoli celý původní řádek;
+zobrazovat adresář postupně po stránkách;
+část LISTu průběžně ukládat do pomocného souboru.
+
+Pro první verzi Sarah 128 je úplně přijatelné použít 48KB limit, ale musí být hlídaný. Data za koncem bufferu se nesmějí přepsat do jiné stránky bez kontroly.
+
+Další důležité věci
+Zásobník musí být pod #C000, ideálně bezpečně ve stabilní oblasti.
+Stav portu #7FFD je potřeba držet ve vlastní proměnné; port se běžně nedá spolehlivě přečíst.
+Při změně stránky je nutné zachovat ostatní bity #7FFD, zejména volbu ROM a obrazovky.
+Bit 5 portu #7FFD se nesmí nechtěně nastavit, protože zamkne další stránkování až do resetu.
+Při použití stránky 7 je potřeba ponechat zobrazování hlavní obrazovky ze stránky 5, jinak by se obsah stránky 7 mohl objevit jako stínová obrazovka.
+Rutina přepnutí stránky by měla být velmi krátká a podle potřeby chráněná DI/EI, aby přerušení nevidělo nekonzistentní stav.
+Jestli se má po ukončení SARAH vracet do 128 BASICu, musíme prověřit, které stránky BASIC používá. Přepsání stránky 0 nebo dalších stránek může návrat znemožnit. Pokud SARAH po spuštění převezme celý počítač, problém je podstatně menší.
+Kapacita programu
+
+Současný blok má 14 336 B. Po odečtení:
+
+font: 1 792 B,
+print/input/keys: 1 109 B,
+
+zbývá přibližně 11 435 B vlastního kódu.
+
+To znamená, že současné jádro by se pravděpodobně celé vešlo do stabilních 24 KB mezi #6000–#BFFF. Zůstalo by zhruba 13 KB na nové rutiny a malé pracovní buffery. Stránku 6 bych proto zpočátku nepovažoval za povinné pokračování hlavního kódu, ale spíš za prostor pro overlaye a objemné části.
+
+To je bezpečnější návrh:
+
+#6000–#BFFF   kompletní funkční jádro SARAH
+#C000–#FFFF   volitelné GUI/textové/programové overlaye
+
+Kdyby se vše pod #C000 nevešlo, teprve potom bychom přesouvali přesně vybrané moduly do stránky 6.
+
+Verdikt
+
+Koncept je dobrý a použitelné stránky jsi rozdělil rozumně. Udělal bych především tyto úpravy:
+
+Veškeré stránkování, ESP komunikaci, +IPD parser, download a práci s buffery umístit pod #C000.
+Stránku 6 používat jako programový overlay, nikoli pro kód, který právě obsluhuje stránky 0/1/3/4/7.
+Download navrhnout jako průběžné ukládání, aby nebyl omezen velikostí jedné stránky.
+Adresář zpřístupnit přes logický 48KB offset a centrální bankovací rutiny.
+Nechat stránku 7 zatím volnou pro budoucí double buffering.
+Přesně určit, zda požadujeme návrat do 128 BASICu; to ovlivní, které stránky smějí být přepsány.
+
+Takto bych Sarah 128 koncipoval. Je to podstatně robustnější základ a zároveň není nutné hned komplikovat první verzi dvojitým download bufferem.
