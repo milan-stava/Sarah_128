@@ -397,7 +397,7 @@ todo:
 ;	DEFINE border_colour	;0=no colours,1=show border colours, yellow for disk operations,
 				;violet= communication with module
 
-	DEFINE hgfx64x24	;nejprve klasickou verzi
+;	DEFINE hgfx64x24	;nejprve klasickou verzi
 
 /*podoba screenu
 0	nadpis
@@ -546,6 +546,8 @@ port_select	equ	#703B
 	;31=user defined speed_ AT+UART_CUR command not sent			...???
 	;32=user defined routine_ speed in UART not set				...???
 	;33=user defined speed_ you try to set nonsence speed (ie. > 23)	...???
+	;48= timeout pri cteni UART/AT odpovedi
+	;49= neplatna/neocekavana odpoved nebo prilis dlouha aktivni FTP zprava
 	;34= dir retrieve error
 	;35= (look_for_ipd) 2nd error
 	;36= error in receive_ftp_answer
@@ -3122,6 +3124,8 @@ search_by_Busy_dir_slow:
 ; Poznamka: Mění banky, ukazatele a příznaky adresáře; řeší plnou paměť i přerušení.
 ; --- KONEC DOKUMENTACE CZ ---
 directory_retrieve				;retrieve directory list
+		xor a
+		ld (dr_reply_pending),a
 		call	cls_9			;clear screen from previous directory
 		call	cls_dir_files
 		call	undraw_cursor
@@ -3215,23 +3219,25 @@ dr10		ld	hl,#5555	;pop	hl
 		and	%00010100
 		jr	nz,dr_item_loop		;NZ different mode than LISTabbr, proceed normaly
 	
-dr13		scf				;new in 1.01. Some servers start with string "Total xx" where xx= number" This we need to get rid off
-		call	rece_byte
-		jr	z,dr13
-		cp	"t"
-		push	af
-		jr	nz,dr_item_loop		;if NZ then A=either "-" or "d"
-						;word "Total xx" at the begining of dir, get rid off it...
-dr14		scf
-		call	rece_byte
-		jr	z,dr14
-		cp	#A
-		jr 	nz,dr14
-		pop	af
-		res	7,(ix+1)		;we got rid off very first "Total XY", set flag accordingly
-
-
-
+; Prvni znak uchovavame mimo zasobnik: dr_get_data muze skoncit nenavratne.
+dr13        call    ftp_read_byte
+            ld      (dr_first_byte),a
+            cp      "t"
+            jr      z,dr14
+            cp      "T"
+            jr      nz,dr_item_loop
+dr14        dec     de              ; zapocitat i preskakovany radek total
+            ld      a,d
+            or      e
+            call    z,dr_get_data
+            call    ftp_read_byte
+            cp      #A
+            jr      nz,dr14
+            res     7,(ix+1)
+            dec     de              ; zapocitat take LF
+            ld      a,d
+            or      e
+            call    z,dr_get_data
 dr_item_loop	ld	bc,0			;BC=item length counter
 
 		;Remember exact start of the new item.  The address alone is not
@@ -3284,12 +3290,12 @@ dr_switch	jp	dr5_skip		;"jp dr5_skip" or 4xNOP
 ;		bit	7,(ix+1)		;checking "Total XY" first item?
 ;		jr	z,dr4			;Z=no
 
-;		pop	af			;new in 1.01, A= either "-" or "d"
+;		ld	a,(dr_first_byte)	;prvni znak bez polozky na zasobniku, A= either "-" or "d"
 ;		jr	dr4_1
 
 
 dr4		scf
-		call	rece_byte
+		call	ftp_read_byte
 		jr	z,dr4
 
 dr4_1;		res	7,(ix+1)		;very first item checked
@@ -3307,7 +3313,7 @@ dr4_1;		res	7,(ix+1)		;very first item checked
 ;		jr	z,dr1			;Z=no more bytes available in module, ask for another
 
 		scf
-		call	rece_byte
+		call	ftp_read_byte
 
 		dec	de	;2x dec rest_chunk;!!!!DEC DE, but test it lower, see 0.94
 ;;		ld	a,d			;testing data was too early, item not closed
@@ -3446,11 +3452,11 @@ open_item_invalid
 dr5_skip			bit	7,(ix+1)		;checking "Total XY" first item?
 		res	7,(ix+1)		;very first item checked	
 		jr	z,dr5s			;Z=no
-		pop	af			;new in 1.01
+		ld	a,(dr_first_byte)	;prvni znak bez polozky na zasobniku
 		jr	dr5s1
 
 dr5s		scf
-		call	rece_byte
+		call	ftp_read_byte
 		jr	z,dr5_skip
 ;						;pokud naète #D, jde o konec adresáøe, zkusme ètení ukonèit a bude to super rychlé a spolehlivé
 ;		cp	#D
@@ -3485,7 +3491,7 @@ dr5_2		inc	bc
 ;new concept of skipping first item part- the attributes
 ;skip, until you meet byte #20
 dr5_7			scf
-		call	rece_byte
+		call	ftp_read_byte
 		ex	af,af'
 		dec	de
 		ld	a,d
@@ -3499,7 +3505,7 @@ dr5_7			scf
 
 		ld	b,3			;left: "    1 529      529          5460 Oct 21 19:57 PsychoSoldier.txt"
 dr5_3			scf
-		call	rece_byte
+		call	ftp_read_byte
 		ex	af,af'
 		dec	de			;2x dec rest_chunk, prior to reading byte!!!! (other dec rest_chunk are after byte reading!!)
 		ld	a,d
@@ -3510,7 +3516,7 @@ dr5_3			scf
 		cp	#20
 		jr	z,dr5_3
 dr5_4			scf
-		call	rece_byte
+		call	ftp_read_byte
 		ex	af,af'
 		dec	de			;2x dec rest_chunk, prior to reading byte!!!! (other dec rest_chunk are after byte reading!!)
 		ld	a,d
@@ -3527,7 +3533,7 @@ dr5_4			scf
 
 ;		ld	b,1			;remove 1x space!!! cannot do more. Otherwise items would be unaligned in a list.
 ;;dr5_5		scf
-;;		call	rece_byte
+;;		call	ftp_read_byte
 ;		ex	af,af'
 ;;		dec	de			;2x dec rest_chunk, prior to reading byte!!!! (other dec rest_chunk are after byte reading!!)
 ;;		ld	a,d
@@ -3619,15 +3625,12 @@ dr_dir_full_no_second_zero
 		pop	de
 		jr	dr_end
 
-dr_end		call	set_3_5mhz
-		ld	hl,at_cipclose1		;close data channel-not needed, will be closed automatically
-		call	send_string		;but if Transfer incomplete, the channel have to be closed
-;		ld	hl,closed		;if already closed, the answer will be "UNLINK   ERROR"
-;		call	check_module_answer
-;		ld	c,43
-;		jp	c,error_handler
-		call	clear_rece_buf
-
+dr_end      call    set_3_5mhz
+            ld      hl,at_cipclose1
+            call    send_string
+            jp      nz,cr_err
+            ; Pockat i na ERROR (kanal uz zavrel server), ne na okamzite ticho.
+            call    ftp_wait_terminal
 		call	passive_receive_off
 		push	iy
 		pop	hl
@@ -3641,12 +3644,13 @@ dr_end		call	set_3_5mhz
 ;		ld	c,43			;anser will be either CLOSED, or UNLINK ERROR (in case chanel had been closed)
 ;		jp	c,error_handler
 
-		jr	dr6			;continue to directory display
+		jp	dr6			;continue to directory display
 
 
 						;nová rutina, musíme ji callovat
 dr_get_data			ld	(drgd2+1),bc
 		exx
+		call dr_finish_chunk
 
 		call	KEYSCAN
 		cp	01			;test BREAK key
@@ -3670,18 +3674,50 @@ drg1		res	0,(ix+1)		;set flag dir has not been read
 
 drdg6		call	data_available_in_module_dir
 		jr	z,drgd1
-		ld	b,h
+drgd_fetch	ld	b,h
 		ld	c,l
 		call	ask_for_data_in_passive_mode
+		ld a,1
+		ld (dr_reply_pending),a
 		exx
 		ld	de,(rest_chunk)
 drgd2		ld	bc,#5555		;nutnost zachovat BC
 		ret
-drgd1		pop	hl			;do not return, jump directly to end
-		jp	z,dr_end_ok
-
-
-
+; Nulova delka znamena prazdny buffer, nikoli konec FTP prenosu.
+; Nejdrive musi prijit 226. POTOM znovu zkontrolujeme datovy kanal.
+drgd1       ld b,128
+.poll       push bc
+            call ftp_query_lengths
+            ld a,h
+            or l
+            jr nz,.more_data
+            ld a,(ix+23)
+            or a
+            jr z,.done
+            ld a,(ftp_control_left)
+            or d
+            or e
+            jr nz,.reply
+            call ftp_poll_delay     ; mezera; stale kontrolujeme OBA kanaly
+            pop bc
+            djnz .poll
+            ld c,48
+            jp error_handler
+.reply      call ask_for_reply_in_passive_mode
+            ld de,226
+            or a
+            sbc hl,de
+            jp nz,ftp_frame_error
+            ld (ix+23),0
+            pop bc
+            jr drgd1                ; po 226 jeste overit datovy kanal
+.more_data  pop bc
+            call data_available_in_module_dir ; omezeni na download_length
+            jp nz,drgd_fetch
+            jr drgd1
+.done       pop bc
+            pop hl                  ; odstranit navrat z dr_get_data
+            jp dr_end_ok
 dr6		call	print_working_directory
 		call	print_dir_files_items	;prints number of items/dirs/files
 		ld	de,menu_dir
@@ -5768,7 +5804,9 @@ lof2		inc	hl
 		jr	nz,lof1		;still not end, continue search
 		
 		
-lofend		pop	hl
+            jr      lof_found
+lofend      ld      e,#FF           ; timeout neni uspech pri castecne shode
+lof_found   pop     hl
 lofend1		inc	e
 		dec	e
 		ret			;Z/NZ
@@ -7454,127 +7492,17 @@ chma1		dec	(ix+6)
 ; --- DOKUMENTACE CZ: check_module_answer ---
 ; Ucel: Přijímá odpověď modulu a hledá očekávaný text.
 ; Vstup: HL = nulou ukončený hledaný text.
-; Vystup: NC = text nalezen, C = nenalezen v neprázdné odpovědi.
-; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
-; Poznamka: Používá RX_buf. Prázdné odpovědi a zpráva busy opakují čtení bez celkového limitu.
+; Vystup: NC = cely text nalezen, C = timeout hledani.
+; Meni: AF, BC, DE, HL, BC'; navic dle BIOSu.
+; Poznamka: Cte proud do konce hledaneho textu, dalsi bajty nemaze. Hledani ma timeout.
 ; --- KONEC DOKUMENTACE CZ ---
-check_module_answer				;new concept
-;;;		ld	(ix+6),#10		;16x must be enough,timeout set to #FF (was only 2x repeats);bylo ;;;koko
-		push	hl			;string we look for
-		call	clear_RX_buf
-;		pop	hl			;string we look for
-chma11		ld	bc,TX_buf-RX_buf	;;;;;
-;chma111		push	hl			;string we look for
-;chma1		ld	bc,#80
-		ld	hl,RX_buf
-		ld	(hl),b			;zero first byte in RX_buf
-		push	hl			;HL=RX_buf
-		push	bc			;BC=length to seek
-		call	receive_data_timeout
-		pop	bc			;BC=length to seek
-		pop	hl			;HL=RX_buf
-
-;;;		dec	(ix+6)
-;;;		pop	hl			;string we look for
-;;;		ld	d,h
-;;;		ld	e,l
-;;;		jr	z,chma3
-
-		ld	a,(hl)
-		or	a
-		jr	z,chma11
-		push	hl
-		push	bc
-		ld	de,busy
-		call	look_for_string
-		pop	bc
-		pop	hl
-;		jr	z,kokot
-		jr	z,chma11		;"busy" anser can occur, so check it too
-;;		push	hl
-;;		push	bc
-;;		ld	de,error_answ
-;;		call	look_for_string
-;;		pop	bc			;BC=length to seek
-;;		pop	hl			;HL=RX_buf
-
-		pop	de			;DE=string we look for
-;;		push	de
-;;		jr	z,chma3			;string ERROR found, C=4
-
-		call	look_for_string
-;		jr	nz,chma1111
-;		jr	nz,chma3		;;;;
-;		pop	hl			;HL=string we look for.Jed, pokud nenajdes hledanou odpoved, jinak se zacykli
-		jr	z,chma1111
-;		jr	nz,chma111
-;;;		dec	(ix+6)
-		jr	nz,chma3
-;;;		jr	chma111
-
-chma1111	call	clear_rece_buf		;clear the incoming "OK"
-		and	a			;set C=0
-		ret
-;;;bylo koko
-;kokot		halt
-
-;chma2		ld	c,0
-;		jr	chma4
-;chma2		dec	(ix+6)
-;		jr	nz,chma1
-;chma3		ld	c,4		;bylo ;;;koko, C=4=answer ERROR returned (reply to AT+CIPSTART=1,"TCP"....etc.)
-
-chma3		scf			;set C=1, as error
-		ret
-;		jp	error_handler1	;bylo ;;;koko
-
-/*
-;		ld	(ix+6),1		;timeout set to #FF (was only 2x repeats)
-chma1		push	hl
-		call	look_on_fly
-		pop	hl
-		jr	nz,chma2
-						;Z=found
-		call	clear_rece_buf		;clear the incoming "OK"
-		and	a			;set C=0
-		ret
-
-chma2						;chma2 rovnou skok na chybu
-;		dec	(ix+6)
-;		jr	nz,chma1
-;		jr	sfcerr2
-		ld	c,4
-		jp	error_handler1
-;		jp	display_error
-*/
-/*
 check_module_answer
-		ld	(ix+6),#20		;timeout set to 32x repeats
-chma2		ld	bc,TX_buf-RX_buf	;length is whole RX buffer
-		ld	hl,RX_buf
-		push	hl
-		push	bc
-		push	de
-		call	receive_data_timeout
-		pop	de
-		pop	bc			;DE=CONNECT
-		pop	hl
-		push	de
-		call	look_for_string
-		pop	de			;DE=string we look for
-		jr	nz,chma1		;NZ=not found
-
-		call	clear_rece_buf		;clear the incoming "OK"
-		and	a			;set C=0
-		ret
-
-chma1		dec	(ix+6)
-		jr	nz,chma2		;NZ=repeat
-
-		ld	c,4
-		jp	display_error
-*/				
-
+            call    look_on_fly
+            jr      nz,chma3
+            or      a
+            ret
+chma3       scf
+            ret
 ;61) !!!"receives_ftp_answer" is a part of send_ftp_command routine. Programs enters it with 2 byte ftp code on the stack!!!
 ;"receive_ftp_answer_isolated" can be used extra. IN=DE=ftpcode we expect
 
@@ -7616,16 +7544,8 @@ rfa3		ld	hl,ok			;look for "OK"
 
 ;		halt				;testing purposes
 
-rfa2		call	look_for_ipd
-		jr	nc,rfa1
-		jp	error_handler
-rfa1		ld	b,h
-		ld	c,l
-		ld	hl,RX_buf
-		push	hl
-		call	receive_data_timeout	;receive ftp message to RX_buf
-		ld	(hl),0
-		pop	de			;RX_buf starts with code number
+rfa2        call ftp_active_reply
+            ld de,RX_buf
 		push	de			;DE=start of message to print
 		call	ConvRStr16
 		pop	de			;DE=start address of message to print
@@ -7817,7 +7737,7 @@ display_error	set	4,(ix+0)	;PRINT again. Return back to from where you were call
 ; --- DOKUMENTACE CZ: cipstart_connect ---
 ; Ucel: Otevře TCP spojení pomocí AT+CIPSTART.
 ; Vstup: TX_buf = argumenty za AT+CIPSTART= včetně CR/LF a nuly.
-; Vystup: NC = nalezena odpověď CONNECT; C = neúspěšná odpověď.
+; Vystup: NC = docteno konecne OK po CONNECT; C = timeout.
 ; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
 ; Poznamka: Chyba odeslání odchází do error_handler.
 ; --- KONEC DOKUMENTACE CZ ---
@@ -7831,7 +7751,7 @@ cs_con_buf	ld	hl,TX_buf		;send it
 		ld	c,3
 		jp	nz,error_handler
 
-		ld	hl,CONNECT		;new concept
+		ld	hl,ok		;docteme i OK za oznameni CONNECT
 ;		ld	de,CONNECT		;check for answer
 		jp	check_module_answer
 
@@ -8127,8 +8047,7 @@ dp0		inc	de
 ;   rozhraní.
 ; Poznamka: Po úspěchu je další čtený bajt začátkem užitečných dat; mění RX_buf a (IX+6).
 ; --- KONEC DOKUMENTACE CZ ---
-look_for_ipd	ld	(ix+6),3		;(was 0), 3 attempts for each search
-		call	clear_RX_buf
+look_for_ipd	ld	(ix+6),3		;RX_buf obsahuje rozectenou FTP odpoved
 lfi7		ld	hl,ipd			;"+IPD,"
 		call	look_on_fly
 		jr	z,lfi3
@@ -8139,51 +8058,18 @@ lfi_err1	scf				;set C to indicate error
 		ret
 ;		jp	error_handler
 
-lfi3		scf
-		call	rece_byte
-		jr	nz,lfi4
-		dec	(ix+6)
-		jr	z,lfi_err
-		jr	lfi3
-
-lfi4		sub	#30
-		push	af			;A=channel number (0-3)
-
-lfi2		scf
-		call	rece_byte
-		jr	nz,lfi5
-		dec	(ix+6)
-		jr	z,lfi_err
-		jr	lfi2
-
-lfi5		ld	de,RX_buf		;now read length of data
-		push	de
-look_f_ipd_loop	scf
-		call	rece_byte
-		jr	nz,lfi6
-		dec	(ix+6)
-;		jr	z,lfi_err
-		jr	nz,look_f_ipd_loop
-		pop	af
-		pop	de			;get SP correct
-		ld	c,35
-		jr	lfi_err1
-
-lfi6		cp	":"
-		jr	z,lfi1
-		ld	(de),a
-		inc	de
-		jr	look_f_ipd_loop
-
-lfi1		pop	de			;HL=RX_buf
-		call	ConvRStr16		;now parse lenght of data
-		pop	af			;A=channel number, HL=lenght of data
-		scf
-		ccf				;set NC for all ok
-		ret				;next reading of bytes brings data
-
-
-
+lfi3        call ftp_read_byte
+            sub "0"
+            cp 5
+            jp nc,ftp_frame_error
+            push af
+            call ftp_read_byte
+            cp ","
+            jp nz,ftp_frame_error
+            call ftp_read_length
+            pop af
+            or a                    ; NC, A=kanal, HL=delka
+            ret
 ;73)prints status of URL and login
 ; --- DOKUMENTACE CZ: print_ftp_status ---
 ; Ucel: Vypíše stav přihlášení a aktuální server.
@@ -8657,6 +8543,10 @@ s20		ld	bc,#783B
 ; Poznamka: Používá TX_buf/RX_buf a transfer_flag.
 ; --- KONEC DOKUMENTACE CZ ---
 send_ftp_command_in_passive_mode
+		push af
+		xor a
+		ld (ftp_control_left),a
+		pop af
 		ld	de,TX_buf
 ;		ld	bc,5
 ;		ldir
@@ -8744,67 +8634,7 @@ sfcip_err	ld	c,37
 ;		jp	nz,cr_err
 
 ;koko/*toto myslím netøeba, vrací serii IPDcek, test na UNLINK ERROR!!!!
-sfcip4		ld	hl,RX_buf
-		ld	bc,#80
-		push	hl
-		push	bc
-		call	receive_data_timeout
-;tady teprve je v RXbufferu udaj s IPD, a pod IPD 0 uz byva 226 Transfer ok, pri malych souborech, toto treba osetrit
-;ale opravdu se musíme ujistit, e jsou tady IPDèka, jinak program pøedbìhneme, a vrátí chybu 34
-		pop	bc
-		pop	hl
-		ld	de,ipd+2	;omit #D,#A
-		call	look_for_string
-		jr	nz,sfcip4	;endles loop!!!! avoid!!!
-
-;koko*/
-
-;;;koko sfcip4		;;;kokocall	clear_rece_buf
-
-/*		ld	hl,at_ciprecvdata	;send AT command to receive desired length of data
-		call	send_string
-		jp	nz,cr_err
-
-		ld	a,"0"
-		ld	hl,TX_buf
-		push	hl
-		ld	(hl),a
-		inc	hl
-		ld	(hl),","
-		inc	hl
-		ld	(hl),"1"
-		inc	hl
-		ld	(hl),"2"
-		inc	hl
-		ld	(hl),"8"
-		inc	hl
-		ld	(hl),#D
-		inc	hl
-		ld	(hl),#A
-		inc	hl
-		ld	(hl),0
-		pop	hl		;HL=TX_buf
-
-		call	send_string	;eg. "0,"
-		jp	nz,cr_err
-
-;cr12		ld	hl,ok
-;		call	look_on_fly
-;		jr	nz,cr12		;dat pryc, najde ok, ktere je az za zpravami z ftpka
-
-		ld	bc,#80
-		ld	hl,RX_buf
-		push	hl
-		ld	de,#FFFF
-		call	rece_block
-
-		pop	hl		;HL=RX_buf
-		ld	de,dvojt
-		call	look_for_string
-		push	de
-		
-		call	ConvRStr16
-*/
+sfcip4
 		call	ask_for_reply_in_passive_mode
 
 		ld	bc,150		;HL=message nr 1, DE=message nr.2 (0 if no message nr 2)
@@ -8903,34 +8733,11 @@ data_available_in_module_dir
 ; --- KONEC DOKUMENTACE CZ ---
 data_available_in_module_file		
 		ld	a,#80			;for sucessful file download we need more than for dir, theoretically can be
-dam6		ld	(ix+6),a		;instant repetiotion, bacuse download is not called if file is not completed
-		call	clear_rece_buf
-;		call	clearni_RXko		;get rid off IPDs, if any
-
-dam1		ld	hl,at_ciprecvlen	;now, send AT command to start receiving data
-		call	send_string		;data available? (pridat timeout!!)
-		jp	nz,cr_err
-
-dam2		ld	hl,RX_buf		
-		ld	bc,#80
-		push	hl
-		push	bc
-		call	receive_data_timeout
-		pop	bc
-		pop	hl
-		ld	de,dvojt
-		call	look_for_string
-		jr	nz,dam2			;previous icoming IPDs in RX:buf. But we need
-						;answer to AT+CIPRECVLEN?
-		ex	de,hl
-		ld	de,carka
-		call	look_for_string
-		jp	nz,cr_err
-		call	ConvRStr16
-		ld	a,h
-		or	l
-		jr	z,dam3			;Z=no data available, check again
-;		ret	nz
+dam6        ld (ix+6),a
+dam1        call ftp_query_lengths
+            ld a,h
+            or l
+            jr z,dam3
 		ld	de,download_length
 		ex	de,hl
 		or	a
@@ -8995,171 +8802,50 @@ ask_for_data_in_passive_mode
 		ld	c,37
 		jp	error_handler
 
-afdipm3		ld	hl,block_asci
-		push	hl
-afdipm1		scf
-		call	rece_byte
-		cp	":"
-		jr	z,afdipm2		;Z=prepared to read pure data
-		ld	(hl),a
-		inc	hl
-		jr	afdipm1
-
-
-
-
-/*
-afdipm5		ld	hl,carka
-		call	look_on_fly		;vyhodnoceni chyby!!!
-		jr	z,afdipm3
-		ld	c,37
-		jp	error_handler
-
-afdipm3		ld	hl,block_asci
-		push	hl
-afdipm1		scf
-		call	rece_byte
-		cp	"I"
-		jr	z,afdipm4
-		cp	":"
-		jr	z,afdipm2		;Z=prepared to read pure data
-		ld	(hl),a
-		inc	hl
-		jr	afdipm1
-*/
-		
-afdipm2		pop	de
-		ld	(hl),0
-		call	ConvRStr16
-		ld	(rest_chunk),hl
-		ret
-/*
-afdipm4		scf
-		call	rece_byte
-		cp	#A
-		jr	nz,afdipm4
-		jr	afdipm5		
-
-;		ld	hl,dvojt
-;		jp	look_on_fly
-*/
-	
+afdipm3     call ftp_read_length
+            ld a,h
+            or l
+            jp z,ftp_frame_error
+            ld de,(rest_chunk)
+            or a
+            sbc hl,de
+            jp c,.length_ok
+            jp nz,ftp_frame_error
+.length_ok  add hl,de
+            ld (rest_chunk),hl
+            ret
 ;86) ask_for_reply_in_passive_mode		;send "AT+CIPRECVDATA=1,128" in pasive receive mode
 ; --- DOKUMENTACE CZ: ask_for_reply_in_passive_mode ---
 ; Ucel: Vyžádá a zpracuje FTP odpověď z řídicího spojení 0.
 ; Vstup: Pasivní příjem; IX = flag1.
-; Vystup: HL = první FTP kód, DE = druhý kód nebo 0.
+; Vystup: HL = kod jednoho uplneho FTP radku, DE=0; dalsi radek zustava ve fronte.
 ; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
 ;   rozhraní.
-; Poznamka: Používá TX_buf, RX_buf a (IX+6); transportní chyby řeší error_handler.
+; Poznamka: Sdili TX_buf pro radek, RX_buf pro AT; transportni chyby resi error_handler.
 ; --- KONEC DOKUMENTACE CZ ---
 ask_for_reply_in_passive_mode
-;OUT=HL=code 1, DE=code 2 or 0 if code 2 not present
-		ld	(ix+6),4	;4 attempts
-
-;;;koko		
-		call	clear_rece_buf
-
-afripm4		ld	hl,at_ciprecvdata	;send AT command to receive desired length of data
-		call	send_string
-		jp	nz,cr_err
-
-		ld	a,"0"
-		ld	hl,TX_buf
-		push	hl
-		ld	(hl),a
-		inc	hl
-		ld	(hl),","
-		inc	hl
-		ld	(hl),"1"
-		inc	hl
-		ld	(hl),"2"
-		inc	hl
-		ld	(hl),"8"
-		inc	hl
-		ld	(hl),#D
-		inc	hl
-		ld	(hl),#A
-		inc	hl
-		ld	(hl),0
-		pop	hl		;HL=TX_buf
-
-		call	send_string	;eg. "0,"
-		jp	nz,cr_err
-
-afripm2;;;koko		call	clear_RX_buf	;the answer is directly eg: #D,#A,"CIPRECVDATA,42:150 Connection accepted..."
-/* rece_block seems to fast with 20 MHz	;delete this call after program rins good
-		ld	bc,#80
-		push	bc
-		ld	hl,RX_buf
-		push	hl
-		ld	de,#FFFF
-		call	rece_block
-
-		pop	hl		;HL=RX_buf
-		pop	bc
-		push	bc
-		ld	de,data
-		call	look_for_string
-		jr	z,afripm1	;Z=answer found		
-		pop	bc
-*/
-		ld	bc,#80
-		push	bc
-		ld	hl,RX_buf
-		push	hl
-		call	receive_data_timeout
-		pop	hl
-		pop	bc
-		ld	de,data
-		call	look_for_string
-		jr	z,afripm1
-
-		dec	(ix+6)
-		jr	nz,afripm4
-;		jr	nz,afripm2
-afripm3		ld	c,34
-		jp	error_handler
-
-afripm1		ld	de,dvojt
-		ld	bc,#80
-		call	look_for_string	;test na výsledek hledání chybí!!!!!
-		jr	nz,afripm3	;NZ=not found
-		push	de
-		call	ConvRStr16
-		pop	de		;DE=start of message 1
-		push	hl		;HL=code number 1
-		push	de		;DE= start of message 1
-		ld	h,d
-		ld	l,e
-		call	print_ftp_message	;print first message
-
-		pop	hl		;HL=start of the asnwer
-		ld	de,eol
-		ld	bc,#80
-		call	look_for_string
-		jr	nz,afripm3
-		push	de		;DE=start of message 2
-		ld	a,(de)
-;		or	a
-		cp	#D
-		jr	z,afr1		;Z=second message not present
-		call	ConvRStr16
-		pop	de		;start of message 2
-		push	hl		;HL=code number 2
-		ld	h,d
-		ld	l,e
-		call	print_ftp_message
-		pop	de		;DE=code number 2
-		pop	hl		;HL=code number 1
-		ret
-afr1		pop	de
-		xor	a
-		ld	d,a
-		ld	e,a		;DE=0, message 2 not present
-		pop	hl		;HL=code number 1	
-		ret
-
+            ld hl,ftp_reply_line
+            ld b,127
+.afr_next   call ftp_control_byte
+            ld c,a
+            ld a,b
+            or a
+            ld a,c
+            jr z,.afr_discard
+            ld (hl),a
+            inc hl
+            dec b
+.afr_discard cp #A
+            jr nz,.afr_next
+            ld (hl),0
+            ld de,ftp_reply_line
+            call ConvRStr16
+            push hl
+            ld hl,ftp_reply_line
+            call print_ftp_message
+            pop hl
+            ld de,0                 ; dalsi radek zustava ulozen pro dalsi volani
+            ret
 ;77) turn off passive recieve mode
 ; --- DOKUMENTACE CZ: passive_receive_off ---
 ; Ucel: Zapne/vypne pasivní příjem ESP pomocí AT+CIPRECVMODE.
@@ -9945,7 +9631,7 @@ uploading_file	db "Uploading file... ",0
 press_b		db "Press B to cancel",0
 progress	db "Progress: ",0
 file_exist_txt	db "File exists. Overwrite/Append/New/aBbort?",0
-title		db "SARAH 1.2, ZX FTP client, Hood, 12/2021- 1/2026, "
+title		db "SARAH 1.2 D1, ZX FTP client, Hood, 12/2021- 1/2026, "
 wifi_type	db #55	;here will be either "M" for MB wifi, or "E" for el wifi, final result will be eg. MBSD, or MESX or EESX.
 
 ;/*	IFDEF mb03
@@ -10116,6 +9802,8 @@ buffers_len	equ $-RX_buf
 	include "disk_operations_esxdos.asm"
 	ENDIF
 
+	include "ftp_directory_io.asm"
+
 bios_start
 		INCBIN "WifiBios20_MB_EL.cod"
 /*
@@ -10128,6 +9816,7 @@ bios_start
 ;	incbin	"WifiBios18.cod"
 */
 bios_len	equ $-bios_start
+	ASSERT $ <= #BFE0
 
 
 	
