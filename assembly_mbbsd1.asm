@@ -5,6 +5,7 @@
 	MODULE v0
 	INCLUDE "sarah_ftp_client.asm"
 	SAVEBIN "SARAH12BSDhgfx",start_address,total_len
+	EMPTYTAP "SARAH12BSD.tap"
 	SAVETAP "SARAH12BSD.tap",CODE,"SAR12BSD",start_address,total_len
 	ENDMODULE
 	UNDEFINE bs_dos

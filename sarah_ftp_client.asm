@@ -397,7 +397,7 @@ todo:
 ;	DEFINE border_colour	;0=no colours,1=show border colours, yellow for disk operations,
 				;violet= communication with module
 
-	DEFINE hgfx64x24	;nejprve klasickou verzi
+;	DEFINE hgfx64x24	;nejprve klasickou verzi
 
 /*podoba screenu
 0	nadpis
@@ -514,7 +514,11 @@ port_select	equ	#703B
 	;7=error sending CIPCLOSE AT command (ftp upload)			...OK
 
 
-	;8= module did not return SEND OK after data block sending (ftp_upl_send)..OK
+	;8= upload: vyprsel limit cekani na SEND OK po odeslani bloku
+	;44= upload: pretekla prijmova fronta odpovedi modulu
+	;45= upload: modul vratil SEND FAIL
+	;46= upload: modul vratil ERROR
+	;47= upload: modul ohlasil CLOSED
 	;9= error in entering passive mode (enter_passive_mode)			...OK
 	;14=file not exist							...OK
 	;15=disk error								...OK
@@ -1280,15 +1284,16 @@ fuf6		ld	bc,#5555
 						;ftp prepared to accept data
 		call	load_init
 		ld	ix,flag1
+        push    af                   ; zachovat vysledek load_init
+        ld      a,dwnld_pag
+        call    PAGE128              ; take soubor kratsi nez diskovy buffer
+        pop     af
 ;	IF bs_dos=0
 	IFNDEF bs_dos
 		jr	c,ftp_upl_last		;C=file<buffer. load only 1x
 	ELSE
 		jr	nc,ftp_upl_last		;NC=file<buffer. load only 1x. BSDOS version uses carry flag differently!!!	
 	ENDIF
-
-		ld	a,dwnld_pag
-		call	PAGE128
 
 ftp_upl_loop	call	display_progress	;upload loop. File in buffer
 		push	ix
@@ -1327,6 +1332,8 @@ ftp_upl_end
 
 
 ful_abort;	push	bc			;in case of error, not only print code, but also send ABOR command to return
+        ld      sp,basic_end-2        ; vsechny cesty maji ruznou hloubku zasobniku
+        call    set_3_5mhz
 		res	4,(ix+3)
 		ld	de,426
 		call	send_abort
@@ -1341,319 +1348,601 @@ ful_abort;	push	bc			;in case of error, not only print code, but also send ABOR 
 		call	print_transfer_status
 		call	directory_retrieve
 ;		call	set_3_5mhz
-		pop	hl			;new!!! since we call routines, pop should be here
-		jp	kl8			;receive ftp answer (226 ABOR command successful), and print it
+; Zasobnik uz byl obnoven na vstupu ful_abort.
+        jp      key_loop             ; dalsi odpoved zpracuje hlavni smycka
 
 
-; ------------------------------------------------------------
-; FTP upload CPU speed limit
-;
-; ESP8266/ESP-AT upload was tested at 3456000 baud:
-;
-;   3.5 MHz  - OK
-;   7 MHz    - OK
-;   14 MHz   - FAIL
-;   20 MHz   - FAIL
-;
-; Failure at 14/20 MHz is not caused by CIPSEND packet size.
-; Even 256-byte packets may fail at 20 MHz.
-;
-; AT+CIPSEND handshake itself is OK at 20 MHz - ESP returns
-; the '>' prompt correctly. send_data also reports successful
-; transmission, but ESP responses show timing-dependent states
-; such as:
-;
-;   busy s...
-;   Recv <n> bytes
-;   busy s...
-;   SEND OK
-;
-; At high CPU speed ESP may not reliably complete reception of
-; the serial data stream although the local UART reports ready.
-;
-; Therefore FTP upload is intentionally limited to 7 MHz.
-; Download works reliably at 20 MHz.
-;
-; Tested with 2048-byte CIPSEND packets.
-; ------------------------------------------------------------
-
-
-
-;subroutine, which sends to ftp server whole buffer blocks by blocks. Max length of block that ESP can send is #800:((
-ftp_send_loop	
-;		call	set_7mhz		;toto jede, ale po nejake dobe spadne, potencial na otestovani
-		ld	hl,ftp_dir_start
-		ld	(ftp_upl_start),hl
-		ld	hl,(portion_len)	;send whole buffer, part by part
-		push	hl
-
-
-fsl1;		ld	bc,#400			;!!!!!IMPORTANT, we can put #800 here, and will send twice as much data in one go!!
-;		ld	bc,#800
-		ld	bc,upload_length		;#800 is here, #400 works too but is slower
-		pop	hl
-		or	a
-		sbc	hl,bc
-		jr	z,ftp_upl_send		;file is round of #800 (#400)
-		jr	c,ftp_send_lastc
-		push	hl
-		call	ftp_upl_send
-		call	KEYSCAN			;user can ABBORT upload with "B" key ("A" already reserved for APPEND selection)
-		cp	"b"
-		ld	c,20
-		jr	z,ful_abort
-		jr	fsl1
-
-ftp_send_lastc	add	hl,bc
-		ld	b,h
-		ld	c,l
-
-; --- DOKUMENTACE CZ: ftp_upl_send ---
-; Ucel: Odešle jeden připravený blok uploadu a vyhodnotí odpověď modulu.
-; Vstup: BC = délka bloku; data a adresy připravené uploadovou smyčkou.
-; Vystup: Odeslaný blok nebo obsluha chyby.
-; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
-; Poznamka: Ukládá délku do ftp_upl_len.
-; --- KONEC DOKUMENTACE CZ ---
-ftp_upl_send	ld	(ftp_upl_len),bc
-		push	bc
-		call	cipsend_lod		;send AT+CIPSEND=1,length_of_data
-		ld	c,6
-		jr	c,ful_abort
-;		jp	c,error_handler
-		pop	bc
-		push	bc
-		ld	hl,(ftp_upl_start)	;IN=BC=lenght of data (#400 bytes or lower)
-		push	hl
-
-;		ei				;should be there according to manual, but works without the 20 ms pause
-;		halt
-;		halt
-;		halt
-;		di				;wait 20 ms (one interrupt) as AT+CIPSEND command requires in the manual
-
-;		ld	de,0
-;		call	send_block
-
-;		call	set_7mhz
-		call	send_data
-;		call	set_20mhz
-
-		pop	hl			;HL=ftp_upl_start
-		pop	bc			;BC=length of data
-		add	hl,bc			;increase next start position by data length
-		ld	(ftp_upl_start),hl
-
-		ld	c,5
-		jr	nz,ful_abort
-;		jp	nz,error_handler
-
-
-		ld	(ix+6),#30		;48 attempts to check if data were sent ok
-fus1		call	clear_RX_buf
-		ld	hl,RX_buf		;find out, if data were sent ok
-		push	hl
-		ld	bc,#20
-		push	bc
-		call	receive_data_timeout
-		pop	bc
-		pop	hl
-
-;		halt				;zkousime
-
-		ld	de,sendok
-		call	look_for_string
-		jr	z,fus2
-		dec	(ix+6)
-		jr	nz,fus1
-		ld	c,8			;if error 8, we could start to reupload the packet
-		jp	ful_abort
-;		jp	error_handler
-
-
-/*novy kod, ale nepomohl pro zrychleni uploadu
-        ld      (ix+6),#30           ; timeout pro prazdne odpovedi
-
-        ; RX buffer vycistit pouze JEDNOU
-        call    clear_RX_buf
-
-; ------------------------------------------------------------
-; Cekani po odeslani dat pres AT+CIPSEND
-;
-; RX_buf:
-;   +00..+0F  = poslednich 16 B predchoziho prijmu
-;   +10..+2F  = novych az 32 B
-;
-; Tim zachytíme i:
-;       "SE" + "ND OK"
-;       "SEND FA" + "IL"
-;       "CLO" + "SED"
-; ------------------------------------------------------------
-
-fus1:
-        ; vymaz pouze oblast pro NOVY prijem, 32 B
-        xor     a
-        ld      hl,RX_buf+#10
-        ld      (hl),a
-        ld      de,RX_buf+#11
-        ld      bc,#1F
-        ldir
-
-        ; prijmi dalsich max. 32 B
-        ld      hl,RX_buf+#10
-        ld      bc,#20
-        call    receive_data_timeout
-
-
-        ; ----------------------------------------
-        ; 1. SEND OK = definitivni uspech
-        ; ----------------------------------------
-
-        ld      hl,RX_buf
-        ld      bc,#30               ; 16 starych + 32 novych
-        ld      de,sendok
-        call    look_for_string
-        jr      z,fus2
-
-
-        ; ----------------------------------------
-        ; 2. SEND FAIL = definitivni chyba
-        ; ----------------------------------------
-
-        ld      hl,RX_buf
-        ld      bc,#30
-        ld      de,upl_sendfail
-        call    look_for_string
-        jr      z,fus_error
-
-
-        ; ----------------------------------------
-        ; 3. ERROR = definitivni chyba
-        ; ----------------------------------------
-
-        ld      hl,RX_buf
-        ld      bc,#30
-        ld      de,upl_error
-        call    look_for_string
-        jr      z,fus_error
-
-
-        ; ----------------------------------------
-        ; 4. CLOSED = definitivni chyba
-        ; ----------------------------------------
-
-        ld      hl,RX_buf
-        ld      bc,#30
-        ld      de,upl_closed
-        call    look_for_string
-        jr      z,fus_error
-
-
-        ; ----------------------------------------
-        ; Prislo vubec neco noveho?
-        ;
-        ; busy s...
-        ; Recv 2048 bytes
-        ; nebo jakykoliv mezistav
-        ;
-        ; = modul zije, cekame dal
-        ; ----------------------------------------
-
-        ld      a,(RX_buf+#10)
+; Upload respektuje takt nastaveny uzivatelem tlacitkem; sam jej nemeni.
+; Pri chybe je zotaveni provedeno na 3,5 MHz. UART baud se nemeni.
+; Timeout i odstup TX zavisi na taktu CPU. Nevyzaduji preruseni ani HALT.
+ftp_send_loop
+        ld      hl,ftp_dir_start
+        ld      (ftp_upl_start),hl
+        ld      hl,(portion_len)
+fsl1
+        ld      a,h
+        or      l
+        jr      z,ftp_send_done       ; nulovy zbytek neposilat jako CIPSEND=0
+        ld      bc,upload_length
         or      a
-        jr      z,fus_no_data
-
-        ; neco prislo -> obnov timeout
-        ld      (ix+6),#30
-
-
-        ; ----------------------------------------
-        ; Najdi konec nove prijatych dat.
-        ;
-        ; Buffer jsme pred prijmem vynulovali,
-        ; takze prvni 0 = konec prijateho textu.
-        ; Maximalne 32 B.
-        ; ----------------------------------------
-
-        ld      hl,RX_buf+#10
-        ld      b,#20
-
-fus_find_end:
-        ld      a,(hl)
-        or      a
-        jr      z,fus_end_found
-
-        inc     hl
-        djnz    fus_find_end
-
-
-fus_end_found:
-        ; HL = prvni byte ZA skutecne prijatymi daty
-        ;
-        ; vezmeme poslednich 16 B celeho proudu
-        ; a presuneme je na zacatek RX_buf
-
-        ld      de,-#10
-        add     hl,de
-
-        ld      de,RX_buf
-        ld      bc,#10
-        ldir
-
-        jr      fus1
-
-
-; ------------------------------------------------------------
-; Nic noveho neprislo.
-; Teprve TADY pocitame timeout.
-; ------------------------------------------------------------
-
-fus_no_data:
-        dec     (ix+6)
-        jr      nz,fus1
-
-        ld      c,8
-        jp      ful_abort
-
-
-; ------------------------------------------------------------
-; Definitivni chyba modulu
-; ------------------------------------------------------------
-
-fus_error:
-        ld      c,8
-        jp      ful_abort
-
-
-; ------------------------------------------------------------
-; SEND OK
-; Teprve ted smi upload pokracovat dalsim blokem.
-; ------------------------------------------------------------
-
-fus2:
+        sbc     hl,bc
+        jr      nc,ftp_send_full
+        add     hl,bc
+        ld      b,h
+        ld      c,l
+        ld      hl,0
+ftp_send_full
+        push    hl                   ; zbytek diskoveho bufferu
+        call    ftp_upl_send
+        call    KEYSCAN
+        cp      "b"
+        jp      z,ful_abort
+        pop     hl
+        jr      fsl1
+ftp_send_done
         ret
 
+; --- DOKUMENTACE CZ: ftp_upl_send ---
+; Ucel: Odesle BC bajtu a vycka na uplne potvrzeni SEND OK.
+; Vstup: BC = 1..upload_length; ftp_upl_start = zdroj v namapovane RAM.
+; Vystup: potvrzeny blok; pri chybe zobrazi kod a ukonci upload.
+; Meni: AF, BC, DE, HL a pracovni RX/TX buffery.
+; Poznamka: ukazatel zdroje posune az po potvrzeni ESP.
+; --- KONEC DOKUMENTACE CZ ---
+ftp_upl_send
+        call    upl_reset_counts
+        xor     a
+        ld      (upl_rx_pos),a
+        ld      (upl_rx_len),a
+        ld      (upl_rx_overflow),a
+        ld      (ftp_upl_len),bc
+        call    cipsend_lod
+        ld      c,6
+        jp      c,upl_transfer_error
+        call    upl_prompt_settle
+        call    upl_reset_counts     ; diagnostika datove faze, bez prikazu a vyzvy
+        ld      bc,(ftp_upl_len)
+        ld      hl,(ftp_upl_start)
+        call    upl_send_data
+        ld      c,5
+        jp      nz,upl_transfer_error
+        ld      a,(upl_rx_overflow)
+        or      a
+        ld      c,44                 ; preteceni zachycene odpovedi
+        jp      nz,upl_transfer_error
+        ld      a,1                  ; cekame na radek SEND OK, nikoli >
+        call    upl_wait_response
+        jr      nc,upl_block_confirmed
+        ld      a,(upl_wait_status)
+        ld      c,8                  ; skutecny timeout, nikoli obecna chyba ESP
+        cp      2
+        jp      c,upl_transfer_error
+        ld      c,44                 ; preteceni prijmove fronty
+        cp      5
+        jp      z,upl_transfer_error
+        add     a,43                 ; 45=SEND FAIL, 46=ERROR, 47=CLOSED
+        ld      c,a
+        jp      upl_transfer_error
+upl_block_confirmed
+        ld      hl,(ftp_upl_start)
+        ld      bc,(ftp_upl_len)
+        add     hl,bc
+        ld      (ftp_upl_start),hl
+        ret
 
-; Pokud uz tyto texty nekde mas, pouzij samozrejme
-; existujici labely a tyto tri nepridavej.
+upl_command_error
+        ld      c,6
+upl_transfer_error
+        ld      sp,basic_end-2
+        ld      a,c
+        ld      (upl_last_error),a
+        ld      a,(upl_wait_status)
+        ld      (upl_last_status),a
+        ld      hl,RX_buf
+        ld      de,upl_last_rx
+        ld      bc,128
+        ldir
+        call    set_3_5mhz            ; pouze zotaveni, bezny upload takt nemeni
+        call    upl_error_dialog     ; vlastni dialog; obecny akey by prepsal data
+        res     5,(ix+0)             ; TCP/FTP uz nelze povazovat za platne
+        res     0,(ix+1)
+        res     4,(ix+3)
+        ld      (ix+23),2
+        bit     2,(ix+3)
+        jr      z,upl_external_reset
+        ld      de,upl_reset_text
+        call    print_ez1
+        call    wifi_off             ; HW reset MB: zadne ABOR/AT do datoveho modu
+        call    wait_long
+        scf
+        call    wifi_on
+        call    wait_long
+        call    wait_long
+        IFNDEF bs_dos
+        call    fClose
+        ld      ix,flag1
+        ENDIF
+        call    speed_management     ; po resetu muze byt UART na vychozi rychlosti
+        bit     6,(ix+0)
+        jr      z,upl_external_reset
+        jp      error_handler_loop   ; obnovit CIPMUX, spojeni a prihlaseni
+upl_external_reset
+        ld      de,upl_reset_manual
+        call    print_ez1
+; EL nema ovladani napajeni pres tento BIOS. Zadny automaticky AT provoz.
+; Po fyzickem resetu modulu uzivatel klavesou L spusti inicializaci.
+upl_reset_key
+        call    KEYSCAN
+        cp      "l"
+        jr      nz,upl_reset_key
+        call    speed_management
+        bit     6,(ix+0)
+        jr      z,upl_external_reset
+        jp      error_handler_loop
 
-upl_sendfail:
-        db      "SEND FAIL",0
+upl_last_error  db 0
+upl_last_status db 0
+upl_last_rx     ds 128
+upl_reset_text   db "Restarting MB WiFi...",0
+upl_reset_manual db "Reset WiFi, then press L",0
 
-upl_error:
-        db      "ERROR",0
+; Ucel: Cely chybovy dialog uploadu, vcetne cekani na klavesu.
+; TX = bajty predane BIOSem do UART, nikoli potvrzene prijeti v ESP.
+; RX = bajty vybrane BIOSem po vyzve > (u chyby prikazu od zacatku bloku).
+; Vstup: ulozena chyba, pocitadla a upl_last_rx. Meni AF/BC/DE/HL/IX.
+; Tisk musi byt zapnut PRED prvnim PRINTHL, ne az v display_error.
+; Radky 22/23 se po dobu cekani nemazou. Klavesa potvrzuje restart WiFi.
+upl_error_dialog
+        ld      ix,flag1
+        set     4,(ix+0)
+        IFDEF hgfx64x24
+        call    set_hgfx_ink_planar
+        call    set_fdma_to_chars
+        ELSE
+        ld      hl,#5AC0             ; viditelne atributy obou spodnich radku
+        ld      de,#5AC1
+        ld      bc,63
+        ld      (hl),7
+        ldir
+        ENDIF
+        call    clear_edit_zone
+        ld      hl,txt_adr_edit_zone1
+        ld      de,upl_diag_title
+        call    PRINTHL
+        ld      a,(upl_last_error)
+        ld      l,a
+        ld      h,0
+        call    upl_print_count
+        ld      de,upl_diag_tx
+        call    PRINT
+        ld      hl,(upl_tx_count)
+        call    upl_print_count
+        ld      de,upl_diag_rx
+        call    PRINT
+        ld      hl,(upl_rx_count)
+        call    upl_print_count
+        ld      de,upl_diag_key
+        call    PRINT
+        ld      hl,txt_adr_edit_zone2
+        ld      de,upl_diag_esp
+        call    PRINTHL
+        ld      hl,upl_last_rx
+        ld      de,upl_diag_line
+        ld      b,48                 ; vejde se do 64sloupcoveho radku
+upl_diag_copy
+        ld      a,(hl)
+        or      a
+        jr      z,upl_diag_end
+        cp      32
+        jr      c,upl_diag_dot
+        cp      127
+        jr      c,upl_diag_store
+upl_diag_dot
+        ld      a,"."
+upl_diag_store
+        ld      (de),a
+        inc     hl
+        inc     de
+        djnz    upl_diag_copy
+upl_diag_end
+        xor     a
+        ld      (de),a
+        ld      de,upl_diag_line
+        ld      a,(de)
+        or      a
+        jr      nz,upl_diag_print
+        ld      de,upl_diag_empty
+upl_diag_print
+        call    PRINT
+upl_diag_release
+        call    inkey
+        or      a
+        jr      nz,upl_diag_release
+upl_diag_wait
+        call    KEYSCAN
+        or      a
+        jr      z,upl_diag_wait
+        jp      clear_edit_zone
+upl_print_count
+        ld      de,block_asci
+        call    HL2ASCII
+        xor     a
+        ld      (de),a
+        ld      de,block_asci
+        jp      PRINT
+upl_diag_title   db "U2 error=",0
+upl_diag_tx      db " TX=",0
+upl_diag_rx      db " RX=",0
+upl_diag_key     db " [key: restart WiFi]",0
+upl_diag_esp     db "ESP: ",0
+upl_diag_empty   db "(no text)",0
+upl_diag_line    ds 49
 
-upl_closed:
-        db      "CLOSED",0
-konec noveho kodu*/
 
-fus2		ret				;upload of packets works without 20 ms pause
-;		ei				;should be there according to manual, but works without the 20 ms pause
-;		halt
-;		di				;wait 20 ms (one interrupt) as AT+CIPSEND command requires in the manual
-;		ret
-ftp_upl_len	dw	#5555			
-ftp_upl_start	dw	#5555
+; Vysilac za behu vybira prijem. ESP muze poslat Recv/busy/SEND OK
+; jeste pred navratem send_data; tato data nesmime ztratit ve FIFO UART.
+; BC=pocet, HL=zdroj; Z=odeslano, NZ=TX timeout. Meni AF/BC/DE/HL.
+upl_send_data
+        ld      a,b
+        or      c
+        ret     z
+        ld      de,0
+upl_tx_retry
+        ld      a,(hl)
+        scf                          ; POVINNE: BIOS bez C preskoci test TX busy!
+        call    send_byte
+        ; WifiBios20_MB_EL.cod +#ED: IN z #133B, bit 1=busy.
+        ; Pri busy vraci C bez OUT; pri volnu zapise bajt na #133B a vrati NC.
+        ; Jde o stav mistniho UART, nikoli potvrzeni prijeti bajtu modulem ESP.
+        push    af
+        call    upl_capture_rx
+        pop     af
+        jr      nc,upl_tx_sent
+        dec     de
+        ld      a,d
+        or      e
+        jr      nz,upl_tx_retry
+        inc     a                    ; NZ, neodesilame zadne dalsi AT prikazy
+        ret
+upl_tx_sent
+        push    hl
+        ld      hl,(upl_tx_count)
+        inc     hl
+        ld      (upl_tx_count),hl
+        pop     hl
+        call    upl_tx_pace          ; omezit souvisly proud do ESP pri turbo CPU
+        inc     hl
+        dec     bc
+        jr      upl_send_data
+
+; Nuluje diagnostiku bloku/datove faze; zachova AF/BC/DE/HL.
+upl_reset_counts
+        push    hl
+        ld      hl,0
+        ld      (upl_tx_count),hl
+        ld      (upl_rx_count),hl
+        pop     hl
+        ret
+
+; Ucel: Konzervativni odstup po uspesnem zapisu bajtu, take pro CIPSEND.
+; UART ready potvrzuje mistni vysilac, nikoli volne misto v prijmu ESP.
+; Vstup/vystup: zadne; zachova AF/BC/DE/HL. CPU ani baud neprepina.
+; Cte takt pri kazdem bajtu, aby respektoval i rucni prepnuti behem uploadu.
+; Pridane cekani: 0 / cca 74 / 111 / 125 us pro 3,5 / 7 / 14 / 20 MHz
+; plus rezije rutiny. Toto je omezeni toku, nikoli zaruka propustnosti ESP.
+upl_tx_pace
+        push    af
+        push    bc
+        push    hl
+        ld      bc,#783B
+        ld      a,#30
+        out     (c),a
+        inc     b
+        in      a,(c)
+        and     3
+        ld      c,a
+        ld      b,0
+        ld      hl,upl_tx_delays
+        add     hl,bc
+        ld      b,(hl)
+        ld      a,b
+        or      a
+        jr      z,upl_tx_pace_done
+upl_tx_pace_loop
+        djnz    upl_tx_pace_loop
+upl_tx_pace_done
+        pop     hl
+        pop     bc
+        pop     af
+        ret
+upl_tx_delays   db 0,40,120,192
+
+; Ucel: Odesle nulou ukonceny prikaz stejnym omezenym TX jako data uploadu.
+; Vstup: HL=text. Vystup: Z=odeslano, NZ=TX timeout; HL=pozice v textu.
+; Meni AF/BC/DE/HL. Terminator neposila, odpovedi zachytava do RX fronty.
+upl_send_string
+        push    hl
+        ld      bc,0
+upl_string_length
+        ld      a,(hl)
+        or      a
+        jr      z,upl_string_ready
+        inc     hl
+        inc     bc
+        jr      upl_string_length
+upl_string_ready
+        pop     hl
+        jp      upl_send_data
+
+; Vybere celou dostupnou davku UART do fronty; zachova AF/BC/DE/HL.
+; Prijem probehne i pri plne fronte, ale preteceni je explicitni chyba.
+upl_capture_rx
+        push    af
+        push    bc
+        push    de
+        push    hl
+upl_capture_poll
+        scf
+        call    rece_byte
+        jr      z,upl_capture_done
+        ld      e,a
+        ld      hl,(upl_rx_count)
+        inc     hl
+        ld      (upl_rx_count),hl
+        ld      a,(upl_rx_len)
+        cp      128
+        jr      nc,upl_capture_full
+        ld      l,a
+        ld      h,0
+        ld      bc,upl_rx_buf
+        add     hl,bc
+        ld      (hl),e
+        inc     a
+        ld      (upl_rx_len),a
+        jr      upl_capture_poll     ; nejprve vybrat FIFO, az potom analyzovat radky
+upl_capture_full
+        ld      a,1
+        ld      (upl_rx_overflow),a
+upl_capture_done
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        ret
+
+; Vraci bajty z fronty; prazdnou frontu doplni dostupnou davkou UART.
+; Vystup jako rece_byte: NZ=bajt v A (i nula!), Z=nic.
+; Zachovava BC/DE/HL. Fronta se nuluje pred kazdym CIPSEND.
+upl_read_byte
+        push    hl
+        push    de
+        ld      a,(upl_rx_pos)
+        ld      e,a
+        ld      a,(upl_rx_len)
+        cp      e
+        jr      z,upl_read_uart
+        ld      d,0
+        ld      hl,upl_rx_buf
+        add     hl,de
+        ld      a,e
+        inc     a
+        ld      (upl_rx_pos),a
+        ld      a,1
+        or      a                    ; NZ nezavisle na hodnote bajtu
+        ld      a,(hl)
+        pop     de
+        pop     hl
+        ret
+upl_read_uart
+        pop     de
+        pop     hl
+        xor     a
+        ld      (upl_rx_pos),a
+        ld      (upl_rx_len),a
+        call    upl_capture_rx       ; prijmout davku bez pomaleho parseru mezi bajty
+        ld      a,(upl_rx_len)
+        or      a
+        ret     z
+        jp      upl_read_byte
+
+; Kratke ustaleni po >; vraci chovani blizsi puvodnimu blokovemu prijmu.
+; 4096 iteraci: cca 5 ms pri 20 MHz / 30 ms pri 3,5 MHz, bez EI/HALT.
+upl_prompt_settle
+        ld      bc,4096
+upl_settle_loop
+        dec     bc
+        ld      a,b
+        or      c
+        jr      nz,upl_settle_loop
+        ret
+
+upl_rx_pos      db 0
+upl_rx_len      db 0
+upl_rx_overflow db 0
+upl_tx_count    dw 0
+upl_rx_count    dw 0
+upl_rx_buf      ds 128
+upl_poll_limits db 2,4,8,12           ; vyzva >, 3,5 / 7 / 14 / 20 MHz
+upl_ack_limits  db 8,16,32,48         ; SEND OK: 4x delsi limit pro WiFi/TCP prodlevy
+
+
+; --- DOKUMENTACE CZ: upl_wait_response ---
+; Ucel: Prubezne cte odpoved ESP, neztraci text mezi jednotlivymi prijmy.
+; Vstup: A=0 cekat na >; A=1 cekat na cely radek SEND OK.
+; Vystup: NC=uspech; C=chyba. upl_wait_status: 0=OK, 1=timeout,
+;         2=SEND FAIL, 3=ERROR, 4=CLOSED, 5=preteceni fronty.
+; Meni: AF, BC, DE, HL, RX_buf; IX/IY dle rece_byte (zde se nemeni).
+; Poznamka: > ma limit 2/4/8/12 * 65536 dotazu, SEND OK 8/16/32/48.
+; Prichozi busy/Recv limit neobnovuje; zmena taktu behem cekani jej ovlivni.
+; RX_buf uchovava posledni radek (max. 127 znaku + nula).
+; Prilis dlouhy radek se zahodi az do LF, nesmi predstirat potvrzeni.
+; --- KONEC DOKUMENTACE CZ ---
+upl_wait_response
+        ld      (upl_wait_mode),a
+        xor     a
+        ld      (upl_wait_status),a
+        ld      bc,#783B
+        ld      a,#30
+        out     (c),a                ; vyber registru, frekvenci nemenit
+        inc     b
+        in      a,(c)
+        and     3
+        ld      e,a
+        ld      d,0
+        ld      hl,upl_poll_limits
+        ld      a,(upl_wait_mode)
+        or      a
+        jr      z,upl_wait_limit
+        ld      hl,upl_ack_limits
+upl_wait_limit
+        add     hl,de
+        ld      b,(hl)
+        ld      c,0
+        ld      hl,RX_buf
+        ld      (hl),0
+        ld      de,0
+upl_wait_poll
+        call    upl_read_byte
+        push    af                   ; uchovat znak i Z z BIOSu
+        ld      a,(upl_rx_overflow)
+        or      a
+        jr      nz,upl_wait_rx_full
+        dec     de
+        ld      a,d
+        or      e
+        jr      nz,upl_wait_tick
+        djnz    upl_wait_tick
+        pop     af
+        ld      a,1
+        jp      upl_wait_fail
+upl_wait_rx_full
+        pop     af
+        ld      a,5
+        jp      upl_wait_fail
+upl_wait_tick
+        pop     af
+        jr      z,upl_wait_poll       ; Z=zadny znak; stav radku zustava
+        cp      ">"
+        jr      nz,upl_wait_char
+        ld      a,(upl_wait_mode)
+        or      a
+        jp      z,upl_wait_ok
+        ld      a,">"
+upl_wait_char
+        cp      13
+        jr      z,upl_wait_poll
+        cp      10
+        jr      z,upl_wait_line
+        cp      32
+        jr      nz,upl_wait_store
+        ld      a,c
+        or      a
+        jr      z,upl_wait_poll       ; zbyla mezera za > neni soucast SEND OK
+        ld      a,32
+upl_wait_store
+        push    af
+        ld      a,c
+        cp      127
+        jr      nc,upl_wait_overflow
+        pop     af
+        ld      (hl),a
+        inc     hl
+        inc     c
+        ld      (hl),0
+        jr      upl_wait_poll
+upl_wait_overflow
+        pop     af
+        ld      c,128                ; priznak zahozeneho dlouheho radku
+        jr      upl_wait_poll
+upl_wait_line
+        ld      a,c
+        or      a
+        jr      z,upl_wait_next
+        bit     7,c
+        jr      nz,upl_wait_next
+        push    bc                   ; classifier smi menit casovace
+        push    de
+        call    upl_classify_line
+        pop     de
+        pop     bc
+        or      a
+        jr      z,upl_wait_next       ; OK, Recv..., busy...: cekat dale
+        cp      1
+        jp      nz,upl_wait_fail      ; 2..4 = definitivni chyba
+        ld      a,(upl_wait_mode)
+        or      a
+        jr      nz,upl_wait_ok
+upl_wait_next
+        ld      hl,RX_buf
+        ; Posledni radek zustava pro diagnostiku, prvni novy znak jej prepise.
+        ld      c,0
+        jr      upl_wait_poll
+upl_wait_ok
+        xor     a
+        ret
+upl_wait_fail
+        ld      (upl_wait_status),a
+        scf
+        ret
+
+; Vstup: RX_buf = radek bez CR/LF, zakoncen nulou; C = jeho delka.
+; Vystup: A=0 mezizprava, 1 SEND OK, 2 SEND FAIL, 3 ERROR, 4 CLOSED.
+; Meni: AF, DE, HL; BC zachovava.
+upl_classify_line
+        ld      hl,RX_buf
+        ld      de,upl_text_ok
+        call    upl_line_equals
+        ld      a,1
+        ret     z
+        ld      hl,RX_buf
+        ld      de,upl_text_fail
+        call    upl_line_equals
+        ld      a,2
+        ret     z
+        ld      hl,RX_buf
+        ld      de,upl_text_error
+        call    upl_line_equals
+        ld      a,3
+        ret     z
+        ld      hl,RX_buf
+        ld      a,c
+        cp      8
+        jr      nz,upl_check_closed
+        inc     hl                   ; povolit jednobajtove ID: 1,CLOSED
+        ld      a,(hl)
+        cp      ","
+        jr      nz,upl_line_other
+        inc     hl
+upl_check_closed
+        ld      de,upl_text_closed
+        call    upl_line_equals
+        ld      a,4
+        ret     z
+upl_line_other
+        xor     a
+        ret
+; Vstup: HL/DE = dva nulou ukoncene texty. Vystup: Z=shoda.
+; Meni: AF, DE, HL; BC zachovava.
+upl_line_equals
+        ld      a,(de)
+        cp      (hl)
+        ret     nz
+        inc     de
+        inc     hl
+        or      a
+        jr      nz,upl_line_equals
+        ret
+
+upl_wait_mode   db 0
+upl_wait_status db 0
+upl_text_ok     db "SEND OK",0
+upl_text_fail   db "SEND FAIL",0
+upl_text_error  db "ERROR",0
+upl_text_closed db "CLOSED",0
+
+ftp_upl_len     dw #5555
+ftp_upl_start   dw #5555
+
 
 
 ;log off ftp
@@ -8027,8 +8316,8 @@ cib		ld   (hl),32
 ; Poznamka: Sestavuje AT+CIPSEND=1,délka; používá TX_buf a block_asci.
 ; --- KONEC DOKUMENTACE CZ ---
 cipsend_lod	ld	hl,at_cipsend	;send "AT+CIPSEND="
-		call	send_string
-		jp	nz,cr_err
+		call	upl_send_string
+		jp	nz,upl_command_error
 
 		ld	a,"1"
 		ld	hl,TX_buf
@@ -8039,8 +8328,8 @@ cipsend_lod	ld	hl,at_cipsend	;send "AT+CIPSEND="
 		inc	hl
 		ld	(hl),0
 		pop	hl
-		call	send_string	;"1,"
-		jp	nz,cr_err
+		call	upl_send_string	;"1,"
+		jp	nz,upl_command_error
 
 ;		ld	hl,(portion_len)
 		ld	hl,(ftp_upl_len)
@@ -8050,41 +8339,13 @@ cipsend_lod	ld	hl,at_cipsend	;send "AT+CIPSEND="
 		xor	a
 		ld	(de),a
 		pop	hl
-		call	send_string	;number of bytes to be sent
-		jp	nz,cr_err
+		call	upl_send_string	;number of bytes to be sent
+		jp	nz,upl_command_error
 		ld	hl,eol
-		call	send_string
-		jp	nz,cr_err
-/*
-;diagnostika pro nefunkcni download
-        call    clear_RX_buf
-
-        ld      hl,RX_buf
-        ld      bc,TX_buf-RX_buf
-        call    receive_data_timeout
-	and	a
-;        halt                    ; tady NMI -> Devastace
-        ret
-;	konec diagnostiky*/
-
-
-        ld      hl,char_zob
-        call    check_module_answer
-        ret     nc              ; > nalezen, hotovo
-
-        ; první čtení mohlo dostat jen "OK",
-        ; zkus ještě jednou počkat na >
-        ld      hl,char_zob
-        jp      check_module_answer
-
-
-
-		ld	hl,char_zob	;new concept
-;		ld	de,char_zob	;Wifi module returned ">" to show readiness to accept?
-		jp	check_module_answer
-;		call	check_module_answer	;show error, if any
-;		jp	c,ret2main_scr	;was error
-;		ret
+		call	upl_send_string
+		jp	nz,upl_command_error
+        xor     a                    ; cekat na samotnou vyzvu >
+        jp      upl_wait_response
 
 ;69) display_progress	prints length of file each time file is loaded/saved, length taken from rest_len
 ; --- DOKUMENTACE CZ: display_progress ---
@@ -9941,7 +10202,7 @@ psw		db "Enter password:",0
 enter_fil_nam	db "Enter file name:",0
 find_txt	db "Find:",0
 loading_file	db "Downloading file... ",0
-uploading_file	db "Uploading file... ",0
+uploading_file	db "Uploading file... [U2] ",0
 press_b		db "Press B to cancel",0
 progress	db "Progress: ",0
 file_exist_txt	db "File exists. Overwrite/Append/New/aBbort?",0
@@ -10132,6 +10393,7 @@ bios_len	equ $-bios_start
 
 	
 ;strankovaci bios
+        ASSERT  $ <= #BFE0           ; kod nesmi prekryt strankovaci BIOS
 		ORG	#BFE0
 
 ; Vstup:
