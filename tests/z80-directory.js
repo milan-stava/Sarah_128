@@ -71,7 +71,7 @@ function makeCpu(code, bios, S, options={}) {
  case 0x0f:cf=!!(a&1);a=(a>>1)|(cf?128:0);break;
  case 0x1f:{const old=cf;cf=!!(a&1);a=(a>>1)|(old?128:0);break;}
  case 0xcb:{const op2=m[pc++];if(op2===0x79)z=!(c&128);else if(op2===0x47)z=!(a&1);else throw Error("CB "+op2);break;}
- case 0xdd:{const op2=m[pc++];if(op2===0x21){ix=word();break;}const disp=m[pc++];const addr=(ix+(disp<128?disp:disp-256))&65535;if(op2===0x7e){a=m[addr];break;}if(op2===0x77){m[addr]=a;break;}if(op2===0x36){m[addr]=m[pc++];break;}if(op2===0x35){m[addr]=(m[addr]-1)&255;z=m[addr]===0;break;}if(op2!==0xcb)throw Error('DD '+op2);const bitop=m[pc++],mask=1<<((bitop>>3)&7);if(bitop<0x80){z=!(m[addr]&mask);}else if(bitop<0xc0){m[addr]&=255^mask;}else{m[addr]|=mask;}break;}
+ case 0xdd:{const op2=m[pc++];if(op2===0x21){ix=word();break;}const disp=m[pc++];const addr=(ix+(disp<128?disp:disp-256))&65535;if(op2===0x7e){a=m[addr];break;}if(op2===0x77){m[addr]=a;break;}if(op2===0x36){m[addr]=m[pc++];break;}if(op2===0x35){m[addr]=(m[addr]-1)&255;z=m[addr]===0;break;}if(op2===0xbe){cp(m[addr]);break;}if(op2!==0xcb)throw Error('DD '+op2);const bitop=m[pc++],mask=1<<((bitop>>3)&7);if(bitop<0x80){z=!(m[addr]&mask);}else if(bitop<0xc0){m[addr]&=255^mask;}else{m[addr]|=mask;}break;}
  case 0xed:{
  const o=m[pc++];const port=bc();
  if(o===0x73){const addr=word(),sp=0xf000-2*stack.length;m[addr]=sp&255;m[addr+1]=sp>>8;}

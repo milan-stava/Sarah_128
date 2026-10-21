@@ -1269,7 +1269,7 @@ fuf6		ld	bc,#5555
 		ld	de,progress
 		call	PRINTHL
 
-;		call	save_dir_position	;realise in next version
+;		set	6,(ix+1)		;pending CWD;realise in next version
 
 ;princip je jasný. Tady musím do pamìti nahrát soubor, napø. o délce 32000
 ;buffer=16kb, take z disku nahraju na 32768 èást 16kb
@@ -1754,7 +1754,7 @@ download_saved_page
 
 
 ;projdi adresar a oznacene soubory mrdni od #4800 (delka bufferu= #800 bajtu)
-ldir_names	call	save_dir_position
+ldir_names	call	save_dir_position_snapshot
 		ld	hl,ftp_dir_start+fi_len-2	;first real directory item
 		ld	(cur_item_addr),hl
 		ld	hl,ftp_dir_page+1
@@ -2633,6 +2633,10 @@ fl3		call	clear_edit_zone
 ;		jp	nz,kl10
 		jr	nz,fl_usr_psw		;not connected, retry
 
+		ld	hl,dir_list_start
+		ld	(dir_list_pointer),hl
+		ld hl,0
+		ld (dir_restore_item),hl
 
 ; -----------------------------------------------------------------------------
 ; FTP DIRECTORY BANK API
@@ -3138,6 +3142,9 @@ directory_retrieve				;retrieve directory list
 
 		;128K: begin every directory transfer on first directory bank (page 0)
 		call	DIR128_FIRST_PAGE
+
+		ld	hl,0
+		ld	(item_counter),hl		;reset item counter
 
 		ld	hl,flag_dir
 		set	7,(hl)		;set flag, that we are about to test first item for "Total XY"
@@ -3742,39 +3749,97 @@ dr11		call	print_transfer_status
 ;up/down, move through dir, initialisation	
 ; --- DOKUMENTACE CZ: dir_move ---
 ; Ucel: Obnoví pozici v nově načteném adresáři nebo zvolí první položku.
-; Vstup: Uložená pozice a item_checksum; aktuální adresář.
+; Vstup: Jednorazova pozice dir_restore_item/row po uspesnem CDUP.
 ; Vystup: Překreslená stránka se správnou pozicí kurzoru.
 ; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
 ; --- KONEC DOKUMENTACE CZ ---
 dir_move	ld	hl,0
 		ld	(mark_counter),hl	;marked items
-		bit	6,(ix+1)
-		jr	nz,dir_move1		;NZ=we go updir, set directory from 1st pos
-		
-		ld	de,(item_checksum)
-		ld	a,d
-		or	e
-		jr	z,dir_move1
+restore_dir_position
+        ld bc,(dir_restore_item)
+        ld a,b
+        or c
+        jp z,dir_move1
+        ld hl,0
+        ld (dir_restore_item),hl   ;consume prepared view, never pop history here
+        ld a,(dir_restore_row)
+        ld (wind_curs_item),a
+;Rebuild view from saved 1-based item_counter and wind_curs_item.
+;Clamp the selected item to the new directory end; bank-safe traversal.
+restore_dir_view
+        ld a,b
+        or c
+        jr nz,rdv_target_ok
+        inc bc                      ;zero ordinal means first item
+rdv_target_ok
+        dec bc                      ;number of forward moves
+        push bc
+        call DIR128_FIRST_PAGE
+        ld hl,(fdp_pointer)
+        ld (cur_item_addr_page),hl
+        ld hl,ftp_dir_start
+        ld (cur_item_addr),hl
+        ld hl,1
+        ld (item_counter),hl
+        pop bc
+rdv_forward
+        ld a,b
+        or c
+        jr z,rdv_selected
+        push bc
+        ld bc,cur_item_addr
+        ld de,cur_item_addr_page
+        call item_add
+        pop bc
+        jr z,rdv_selected           ;shorter list: keep last valid item
+        ld hl,(item_counter)
+        inc hl
+        ld (item_counter),hl
+        dec bc
+        jr rdv_forward
+rdv_selected
+        ld hl,(cur_item_addr)
+        ld (item_pg_start),hl
+        ld hl,(cur_item_addr_page)
+        ld (item_pg_start_page),hl
+        ld a,(wind_curs_item)
+        or a
+        jr nz,rdv_row_nonzero
+        inc a
+rdv_row_nonzero
+        cp (ix+16)
+        jr c,rdv_row_ok
+        ld a,(AP_a_page)
+rdv_row_ok
+        dec a
+        ld b,a                      ;requested backward moves
+        ld c,1                      ;actual cursor row
+        jr z,rdv_cursor
+rdv_backward
+        push bc
+        ld bc,item_pg_start
+        ld de,item_pg_start_page
+        call item_sub
+        pop bc
+        jr z,rdv_cursor             ;directory start reached
+        inc c
+        djnz rdv_backward
+rdv_cursor
+        ld a,c
+        ld (wind_curs_item),a
+        ld hl,(cursor_w_stadr)
+        ld de,32
+        dec a
+        jr z,rdv_draw
+rdv_cursor_loop
+        add hl,de
+        dec a
+        jr nz,rdv_cursor_loop
+rdv_draw
+        ld (cursor_w_curad),hl
+;        call wifi_unwait
+        jp dir_move_draw
 
-
-		;Check saved position checksum in its directory bank.
-		;Read checksum bytes directly from RAM, so DE is free for paging.
-		ld	hl,(cur_item_adr_tmp)
-		ld	de,(cur_item_adr_tmp_page)
-		call	DIR128_MAP_DE
-		ld	a,(item_checksum)
-		cp	(hl)
-		jr	nz,dir_move1		;current item length LOW does not match
-		call	DIR128_DEC_HL
-		jr	c,dir_move1
-		call	DIR128_DEC_HL
-		jr	c,dir_move1
-		ld	a,(item_checksum+1)
-		cp	(hl)
-		jr	nz,dir_move1		;previous item trailing HIGH does not match
-		
-		ld	hl,0
-		ld	(item_checksum),hl	;signal, next reading go from start
 
 dir_move5	ld	de,(cur_item_adr_tmp)	;DE=cur_item_adr_tmp
 		ld	hl,(item_pg_start_tmp)
@@ -3792,7 +3857,9 @@ dir_move5	ld	de,(cur_item_adr_tmp)	;DE=cur_item_adr_tmp
 						;DE=cur_item_adr
 						;HL=item_pg_start
 						;A=wind_curs_item
-dir_move1	call	DIR128_FIRST_PAGE	;first FTP directory bank = page 0
+dir_move1	ld hl,1
+		ld (item_counter),hl
+		call	DIR128_FIRST_PAGE	;first FTP directory bank = page 0
 		ld	de,(fdp_pointer)
 		ld	(cur_item_addr_page),de
 		ld	(item_pg_start_page),de
@@ -3816,6 +3883,7 @@ dir_move2	ld	(cur_item_addr),de	;start dir from item in HL
 		ld	(wind_curs_item),a
 ;		ld	hl,(cursor_w_stadr)	;starting position of window
 		ld	(cursor_w_curad),bc	;and make it current add
+dir_move_draw
 		call	wifi_unwait
 dir_move4	call	print_page		;print without settings parameters
 		call	prn_mark_items
@@ -4035,7 +4103,7 @@ go_updir1	res	6,(ix+1)		;signal, we go updir
 ed2	;	ld	de,INPBUFF
 	;	ldir
 
-		call	save_dir_position	
+		set	6,(ix+1)		;pending CWD
 ;		set	6,(ix+6)
 
 ed6		ld	a,1
@@ -4058,7 +4126,15 @@ ed3		call	send_ftp_command
 ;		pop	af
 		ret
 ;		ret	c			;or jp c,error_handler
-ed4		call	undraw_cursor
+ed4        bit 6,(ix+1)
+           jr z,ed4_updir
+           call save_dir_position
+           ld hl,0
+           ld (dir_restore_item),hl ;successful CWD cancels pending parent view
+           jr ed4_read
+ed4_updir  call pop_dir_position    ;only reached after successful CDUP
+ed4_read
+		call	undraw_cursor
 		jp	directory_retrieve
 
 
@@ -6260,69 +6336,87 @@ underl		ld	a,34			;""""
 
 ;20) save dir position, so that you can renew the dir from where you have been
 ; --- DOKUMENTACE CZ: save_dir_position ---
-; Ucel: Uloží polohu v adresáři včetně banky, kurzoru a kontrolních bajtů.
+; Ucel: Ulozi poradi polozky a radek kurzoru pro navrat do rodice.
 ; Vstup: Aktuální ukazatele adresáře a IX = flag1.
-; Vystup: Stav uložen do *_tmp a item_checksum.
+; Vystup: Tri bajty v historii od basic_end-128.
 ; Meni: AF, BC, DE, HL; IX a IY zachovány.
-; Poznamka: Nastavuje bit 6 v (IX+1); může přemapovat adresářovou RAM.
+; Poznamka: Volat az po uspesnem CWD; muze premapovat adresarovou RAM.
 ; --- KONEC DOKUMENTACE CZ ---
+
+;cim je tvorena zobrazovana cast adresare:
+;cursor_w_curad		2,adresa ve VRAM, kam se ma vykreslit kurzor
+;wind_curs_item		1,pozice kurzoru v adresari, 1-8
+;item_pg_start		2,adresa prvniho zobrazovaneho itemu v adresari
+;item_pg_start_page	2,„ukazatel do tabulky ftp_dir_page pro banku položky
+;cur_item_addr		2,adresa aktualniho itemu v adresari
+;cur_item_addr_page	2,„ukazatel do tabulky ftp_dir_page pro banku položky
+
+
+;Prepare a one-shot view after successful CDUP. Empty history means first item.
+pop_dir_position
+        ld hl,(dir_list_pointer)
+        ld de,dir_list_start
+        or a
+        sbc hl,de
+        ret z
+        ld hl,(dir_list_pointer)
+        dec hl
+        ld a,(hl)
+        ld (dir_restore_row),a
+        dec hl
+        ld b,(hl)
+        dec hl
+        ld c,(hl)
+        ld (dir_list_pointer),hl
+        ld (dir_restore_item),bc
+        ret
 save_dir_position
-;		res	6,(ix+1)
-		set	6,(ix+1)		;signal, we enter dir
+        ;Derive ordinal from the pointer, also after FIND and page movement.
+        ld hl,(cur_item_addr)
+        ld (dir_search_addr),hl
+        ld hl,(cur_item_addr_page)
+        ld (dir_search_page),hl
+        ld hl,1
+        ld (item_counter),hl
+sdp_count
+        ld bc,dir_search_addr
+        ld de,dir_search_page
+        call item_sub
+        jr z,sdp_counted
+        ld hl,(item_counter)
+        inc hl
+        ld (item_counter),hl
+        jr sdp_count
+sdp_counted
+        ld de,(cur_item_addr_page)
+        call DIR128_MAP_DE
+        ld hl,(dir_list_pointer)
+        ld de,(item_counter)
+        ld (hl),e
+        inc hl
+        ld (hl),d
+        inc hl
+        ld a,(wind_curs_item)
+        ld (hl),a
+        inc hl
+        ld (dir_list_pointer),hl
+        ret
 
-		;Save current item address AND its directory bank.
-		ld	hl,(cur_item_addr)
-		ld	(cur_item_adr_tmp),hl
-		ld	de,(cur_item_addr_page)
-		ld	(cur_item_adr_tmp_page),de
-
-		;First item is page 0:#C000. No checksum is required there.
-		push	hl
-		ex	de,hl
-		ld	bc,ftp_dir_page+1
-		or	a
-		sbc	hl,bc
-		pop	hl
-		jr	nz,sdp_not_first
-		ld	bc,ftp_dir_start
-		or	a
-		sbc	hl,bc
-		add	hl,bc			;restore current item address
-		jr	nz,sdp_not_first
-		ld	hl,0
-		ld	(item_checksum),hl
-		jr	sdp_save_screen
-
-sdp_not_first
-		;Same 2-byte checksum as before, but store bytes directly.
-		;DE remains only the page-table pointer used by DIR128_MAP_DE.
-		call	DIR128_MAP_DE
-		ld	a,(hl)
-		ld	(item_checksum),a
-		call	DIR128_DEC_HL
-		jr	c,sdp_checksum_zero
-		call	DIR128_DEC_HL
-		jr	c,sdp_checksum_zero
-		ld	a,(hl)
-		ld	(item_checksum+1),a
-		jr	sdp_save_screen
-
-sdp_checksum_zero
-		ld	hl,0
-		ld	(item_checksum),hl
-
-sdp_save_screen
-		ld	hl,(cursor_w_curad)
-		ld	(cursor_w_curad_tmp),hl
-		ld	a,(wind_curs_item)
-		ld	(wind_curs_item_tmp),a
-		ld	hl,(item_pg_start)
-		ld	(item_pg_start_tmp),hl
-		ld	hl,(item_pg_start_page)
-		ld	(item_pg_start_tmp_page),hl
-		ret
-
-
+;Download snapshot does not push directory history.
+save_dir_position_snapshot
+        ld hl,(cur_item_addr)
+        ld (cur_item_adr_tmp),hl
+        ld hl,(cur_item_addr_page)
+        ld (cur_item_adr_tmp_page),hl
+        ld hl,(cursor_w_curad)
+        ld (cursor_w_curad_tmp),hl
+        ld a,(wind_curs_item)
+        ld (wind_curs_item_tmp),a
+        ld hl,(item_pg_start)
+        ld (item_pg_start_tmp),hl
+        ld hl,(item_pg_start_page)
+        ld (item_pg_start_tmp_page),hl
+        ret
 ;22) by Busy
 ; --- DOKUMENTACE CZ: ConvRStr32 ---
 ; Ucel: Převede desetinný text na 32bitové číslo.
@@ -8953,6 +9047,7 @@ pwd1
 	IFDEF hgfx64x24
 		ld	bc,#0200
 	ELSE
+		ld	hl,#4000		;bitmap address, not text coordinates #0000
 		ld	b,8*2
 	ENDIF
 		call	cls_9_lines
@@ -9783,7 +9878,11 @@ cur_lin_prn_adr	dw #5555	;;;;;ix+27, current addres for line/item print
 item_file_count	dw #5555	;ix+29, item (for NLST)/ file (for LIST) counter (IY will count files/ items)
 mark_counter	dw #5555	;ix+30, counts marked files
 dir_counter	dw #5555	;IX+32
-
+item_counter	dw #5555	;IX+34, counts items in the directory view (files+dirs)
+dir_restore_item dw 0
+dir_restore_row db 1
+dir_list_pointer dw dir_list_start
+dir_list_start equ basic_end-128
 ;end of flags
 
 ;core		db #55,#55,#55	
