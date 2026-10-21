@@ -23,7 +23,6 @@
 ;DONE	CLS_9_lines
 
 
-
 ;verze 1.2 stejna jako 1.1, ale davame novy wifi bios 2.0, a budou jen 2 verze:
 ;pro BSDOS a pro ESXDOS. Pokud je MB wifi, pusti se ta, pokud ne, pak el wifi
 ;opravy:
@@ -644,7 +643,7 @@ printyesno1	ld	(hl),a
 
 		set	4,(ix+0)		;set flag to print info in speed management
 		call	speed_management
-		call	print_whole_screen+3	;bez CLS (aby se nesmazalo info o Speed)
+		call	print_start_screen	;layout only: verify connection before PWD
 
 
 ;	IF bs_dos=0
@@ -689,9 +688,11 @@ kl5		call	get_status_ftp		;find out if already connected to ftp server
 ;		jr	z,key_loop		;Z=connected+ logged in
 		bit	0,(ix+1)		;dir already read in?
 		jp	z,directory_retrieve
+		call resume_directory_screen	;redraw cached directory after BASIC/recovery
 		jr	key_loop
 
-kl10		cp	"5"
+kl10		res 0,(ix+1)		;connection lost: cached directory is no longer valid
+		cp	"5"
 		jr	nz,kl3			;NZ=status "2" or "4" or "3"
 ;		jr	nz,kl4
 		dec	(ix+6)			;status= "5" module not connected to AP, try it out 20x
@@ -1177,15 +1178,8 @@ change_host	ld	de,enter_url
 
 
 ;upload file
-; --- DOKUMENTACE CZ: ftp_upload_file ---
-; Ucel: Nahraje lokální soubor na FTP server.
-; Vstup: Přihlášené FTP spojení; soubor zadaný uživatelem.
-; Vystup: Dokončený/zrušený/chybný upload, stav v transfer_flag.
-; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb. Diskové
-;   služby mohou používat IX/IY a alternativní sadu.
-; Poznamka: Řeší existující soubor, datové spojení, čtení disku a průběh přenosu.
-; --- KONEC DOKUMENTACE CZ ---
-ftp_upload_file	bit	5,(ix+0)
+ftp_upload_file
+		bit	5,(ix+0)
 		ret	z			;if no connection, return
 
 		ld	de,enter_fil_nam
@@ -1207,7 +1201,7 @@ ftp_upload_file	bit	5,(ix+0)
 		call	file_exist		;find out if file exists
 		ld	ix,flag1
 		ld	c,14
-;		jr	nz,ful_abort
+;		jp	nz,ful_abort
 		jp	nz,error_handler	;file not exist
 
 		ld	a,1
@@ -1241,6 +1235,8 @@ fuf4		jp	z,clear_edit_zone
 		jr	fuf3			;endless loop!!!!
 
 fuf2		push	hl
+		ld a,1
+		ld (upload_legacy_mode),a
 
 		call	send_type_command_i	;switch to TYPE I (binary)
 		call	enter_passive_mode
@@ -1257,9 +1253,12 @@ fuf6		ld	bc,#5555
 		ld	de,150
 		call	send_ftp_command	;sends STOR or APPE+ file name
 		ld	c,17
-		jr	c,ful_abort
+		jp	c,ful_abort
 
-;;		call	set_20mhz		;nemuzu upload dostat na vic nez 3,5Mhz, proc??????
+		call	save_dir_position_snapshot	;save current directory position, so that we can return to it after upload
+		ld	a,dwnld_pag
+		call	PAGE128
+		call	set_7mhz		;nemuzu upload dostat na vic nez 3,5Mhz, proc??????
 
 		ld	de,uploading_file		;for test purposes only
 		call	print_ez1
@@ -1269,16 +1268,16 @@ fuf6		ld	bc,#5555
 		ld	de,progress
 		call	PRINTHL
 
-;		set	6,(ix+1)		;pending CWD;realise in next version
+;		call	save_dir_position	;realise in next version
 
-;princip je jasný. Tady musím do pamìti nahrát soubor, napø. o délce 32000
-;buffer=16kb, take z disku nahraju na 32768 èást 16kb
+;princip je jasný. Tady musím do paměti nahrát soubor, např. o délce 32000
+;buffer=16kb, takže z disku nahraju na 32768 část 16kb
 ;pak:
-;1) polu pøíkaz AT+CIPSEND=1,2048 (2048 je pro ná modul maximum:(((((()
-;2) polu 2048 bajtù
-;3) polu pøíkaz AT+CIPSEND=1,2048
-;4) polu 2048 bajtù, a poøád dokola. A je ve posláno, pak polu....
-;5) polu AT+CIPCLOSE=1
+;1) pošlu příkaz AT+CIPSEND=1,2048 (2048 je pro náš modul maximum:(((((()
+;2) pošlu 2048 bajtů
+;3) pošlu příkaz AT+CIPSEND=1,2048
+;4) pošlu 2048 bajtů, a pořád dokola. Až je vše posláno, pak pošlu....
+;5) pošlu AT+CIPCLOSE=1
 						;ftp prepared to accept data
 		call	load_init
 		ld	ix,flag1
@@ -1288,9 +1287,6 @@ fuf6		ld	bc,#5555
 	ELSE
 		jr	nc,ftp_upl_last		;NC=file<buffer. load only 1x. BSDOS version uses carry flag differently!!!	
 	ENDIF
-
-		ld	a,dwnld_pag
-		call	PAGE128
 
 ftp_upl_loop	call	display_progress	;upload loop. File in buffer
 		push	ix
@@ -1317,74 +1313,58 @@ ftp_upl_end
 		ld	hl,at_cipclose1		;close data channel to complete upload
 		call	send_string
 		ld	c,7
-		jr	nz,ful_abort
+		jp	nz,ful_abort
 		call	set_3_5mhz
 		ld	de,226
 		call	receive_ftp_answer_isolated
 		ld	c,18
 		ld	(ix+23),0		;0= Transfer OK	
-		jp	nc,fdfm4		;print_transfer_status+undraw_cursor+directory_retrieve
+		jp c,ful_abort
+		xor a
+		ld (upload_legacy_mode),a
+		jp directory_retrieve	;refresh using normal directory communication
 ;		jp	nc,print_transfer_status
 ;		jp	nc,clear_edit_zone	;successful end	
 
 
-ful_abort;	push	bc			;in case of error, not only print code, but also send ABOR command to return
-		res	4,(ix+3)
-		ld	de,426
-		call	send_abort
-;		ld	c,16			;426 Connection closed
-;		jp	c,error_handler		;neni osetreno, ale melo by, zde muze byt i kod 226, pak se to tvari,ze
-;		jr	nc,fua1			;prikaz ABOR nebyl uspesne prijat
-;		pop	bc
-
-
-
-		ld	(ix+23),1		;set flag to print "Transfer aborted"	
-		call	print_transfer_status
-		call	directory_retrieve
-;		call	set_3_5mhz
-		pop	hl			;new!!! since we call routines, pop should be here
-		jp	kl8			;receive ftp answer (226 ABOR command successful), and print it
-
-
-; ------------------------------------------------------------
-; FTP upload CPU speed limit
-;
-; ESP8266/ESP-AT upload was tested at 3456000 baud:
-;
-;   3.5 MHz  - OK
-;   7 MHz    - OK
-;   14 MHz   - FAIL
-;   20 MHz   - FAIL
-;
-; Failure at 14/20 MHz is not caused by CIPSEND packet size.
-; Even 256-byte packets may fail at 20 MHz.
-;
-; AT+CIPSEND handshake itself is OK at 20 MHz - ESP returns
-; the '>' prompt correctly. send_data also reports successful
-; transmission, but ESP responses show timing-dependent states
-; such as:
-;
-;   busy s...
-;   Recv <n> bytes
-;   busy s...
-;   SEND OK
-;
-; At high CPU speed ESP may not reliably complete reception of
-; the serial data stream although the local UART reports ready.
-;
-; Therefore FTP upload is intentionally limited to 7 MHz.
-; Download works reliably at 20 MHz.
-;
-; Tested with 2048-byte CIPSEND packets.
-; ------------------------------------------------------------
-
-
-
+ful_abort  call set_3_5mhz
+           res 4,(ix+3)
+           ld de,426
+           call send_abort
+           ;ABOR may finish directly with 225/226, or 426 followed by 226.
+           ld bc,426
+           or a
+           sbc hl,bc
+           jr nz,ful_abort_final
+           ex de,hl               ;second reply, if already in the same IPD packet
+           ld a,h
+           or l
+           jr nz,ful_abort_final_code
+           call upl_old_read_reply ;later IPD: same reception as original upload
+           ld de,RX_buf
+           call ConvRStr16
+           jr ful_abort_final_code
+ful_abort_final
+           add hl,bc              ;restore first reply code
+ful_abort_final_code
+           ld bc,225
+           or a
+           sbc hl,bc
+           jr z,ful_abort_done
+           dec hl                 ;226 - 225 = 1
+           ld a,h
+           or l
+           ld c,16
+           jp nz,error_handler    ;never send TYPE after an unconfirmed ABOR
+ful_abort_done
+           xor a
+           ld (upload_legacy_mode),a
+           ld (ix+23),1
+           call print_transfer_status
+           call directory_retrieve
+           jp initsp_keyloop      ;discard nested upload calls and temporary pushes
 ;subroutine, which sends to ftp server whole buffer blocks by blocks. Max length of block that ESP can send is #800:((
-ftp_send_loop	
-;		call	set_7mhz		;toto jede, ale po nejake dobe spadne, potencial na otestovani
-		ld	hl,ftp_dir_start
+ftp_send_loop	ld	hl,ftp_dir_start
 		ld	(ftp_upl_start),hl
 		ld	hl,(portion_len)	;send whole buffer, part by part
 		push	hl
@@ -1403,25 +1383,18 @@ fsl1;		ld	bc,#400			;!!!!!IMPORTANT, we can put #800 here, and will send twice a
 		call	KEYSCAN			;user can ABBORT upload with "B" key ("A" already reserved for APPEND selection)
 		cp	"b"
 		ld	c,20
-		jr	z,ful_abort
+		jp	z,ful_abort
 		jr	fsl1
 
 ftp_send_lastc	add	hl,bc
 		ld	b,h
 		ld	c,l
 
-; --- DOKUMENTACE CZ: ftp_upl_send ---
-; Ucel: Odešle jeden připravený blok uploadu a vyhodnotí odpověď modulu.
-; Vstup: BC = délka bloku; data a adresy připravené uploadovou smyčkou.
-; Vystup: Odeslaný blok nebo obsluha chyby.
-; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
-; Poznamka: Ukládá délku do ftp_upl_len.
-; --- KONEC DOKUMENTACE CZ ---
 ftp_upl_send	ld	(ftp_upl_len),bc
 		push	bc
 		call	cipsend_lod		;send AT+CIPSEND=1,length_of_data
 		ld	c,6
-		jr	c,ful_abort
+		jp	c,ful_abort
 ;		jp	c,error_handler
 		pop	bc
 		push	bc
@@ -1431,15 +1404,13 @@ ftp_upl_send	ld	(ftp_upl_len),bc
 ;		ei				;should be there according to manual, but works without the 20 ms pause
 ;		halt
 ;		halt
-;		halt
+;		nop
 ;		di				;wait 20 ms (one interrupt) as AT+CIPSEND command requires in the manual
 
 ;		ld	de,0
 ;		call	send_block
 
-;		call	set_7mhz
 		call	send_data
-;		call	set_20mhz
 
 		pop	hl			;HL=ftp_upl_start
 		pop	bc			;BC=length of data
@@ -1447,207 +1418,26 @@ ftp_upl_send	ld	(ftp_upl_len),bc
 		ld	(ftp_upl_start),hl
 
 		ld	c,5
-		jr	nz,ful_abort
+		jp	nz,ful_abort
 ;		jp	nz,error_handler
 
 
-		ld	(ix+6),#30		;48 attempts to check if data were sent ok
+		ld	(ix+6),#30
 fus1		call	clear_RX_buf
-		ld	hl,RX_buf		;find out, if data were sent ok
+		ld	hl,RX_buf
 		push	hl
 		ld	bc,#20
 		push	bc
 		call	receive_data_timeout
 		pop	bc
 		pop	hl
-
-;		halt				;zkousime
-
 		ld	de,sendok
 		call	look_for_string
 		jr	z,fus2
 		dec	(ix+6)
 		jr	nz,fus1
-		ld	c,8			;if error 8, we could start to reupload the packet
+		ld	c,8
 		jp	ful_abort
-;		jp	error_handler
-
-
-/*novy kod, ale nepomohl pro zrychleni uploadu
-        ld      (ix+6),#30           ; timeout pro prazdne odpovedi
-
-        ; RX buffer vycistit pouze JEDNOU
-        call    clear_RX_buf
-
-; ------------------------------------------------------------
-; Cekani po odeslani dat pres AT+CIPSEND
-;
-; RX_buf:
-;   +00..+0F  = poslednich 16 B predchoziho prijmu
-;   +10..+2F  = novych az 32 B
-;
-; Tim zachytíme i:
-;       "SE" + "ND OK"
-;       "SEND FA" + "IL"
-;       "CLO" + "SED"
-; ------------------------------------------------------------
-
-fus1:
-        ; vymaz pouze oblast pro NOVY prijem, 32 B
-        xor     a
-        ld      hl,RX_buf+#10
-        ld      (hl),a
-        ld      de,RX_buf+#11
-        ld      bc,#1F
-        ldir
-
-        ; prijmi dalsich max. 32 B
-        ld      hl,RX_buf+#10
-        ld      bc,#20
-        call    receive_data_timeout
-
-
-        ; ----------------------------------------
-        ; 1. SEND OK = definitivni uspech
-        ; ----------------------------------------
-
-        ld      hl,RX_buf
-        ld      bc,#30               ; 16 starych + 32 novych
-        ld      de,sendok
-        call    look_for_string
-        jr      z,fus2
-
-
-        ; ----------------------------------------
-        ; 2. SEND FAIL = definitivni chyba
-        ; ----------------------------------------
-
-        ld      hl,RX_buf
-        ld      bc,#30
-        ld      de,upl_sendfail
-        call    look_for_string
-        jr      z,fus_error
-
-
-        ; ----------------------------------------
-        ; 3. ERROR = definitivni chyba
-        ; ----------------------------------------
-
-        ld      hl,RX_buf
-        ld      bc,#30
-        ld      de,upl_error
-        call    look_for_string
-        jr      z,fus_error
-
-
-        ; ----------------------------------------
-        ; 4. CLOSED = definitivni chyba
-        ; ----------------------------------------
-
-        ld      hl,RX_buf
-        ld      bc,#30
-        ld      de,upl_closed
-        call    look_for_string
-        jr      z,fus_error
-
-
-        ; ----------------------------------------
-        ; Prislo vubec neco noveho?
-        ;
-        ; busy s...
-        ; Recv 2048 bytes
-        ; nebo jakykoliv mezistav
-        ;
-        ; = modul zije, cekame dal
-        ; ----------------------------------------
-
-        ld      a,(RX_buf+#10)
-        or      a
-        jr      z,fus_no_data
-
-        ; neco prislo -> obnov timeout
-        ld      (ix+6),#30
-
-
-        ; ----------------------------------------
-        ; Najdi konec nove prijatych dat.
-        ;
-        ; Buffer jsme pred prijmem vynulovali,
-        ; takze prvni 0 = konec prijateho textu.
-        ; Maximalne 32 B.
-        ; ----------------------------------------
-
-        ld      hl,RX_buf+#10
-        ld      b,#20
-
-fus_find_end:
-        ld      a,(hl)
-        or      a
-        jr      z,fus_end_found
-
-        inc     hl
-        djnz    fus_find_end
-
-
-fus_end_found:
-        ; HL = prvni byte ZA skutecne prijatymi daty
-        ;
-        ; vezmeme poslednich 16 B celeho proudu
-        ; a presuneme je na zacatek RX_buf
-
-        ld      de,-#10
-        add     hl,de
-
-        ld      de,RX_buf
-        ld      bc,#10
-        ldir
-
-        jr      fus1
-
-
-; ------------------------------------------------------------
-; Nic noveho neprislo.
-; Teprve TADY pocitame timeout.
-; ------------------------------------------------------------
-
-fus_no_data:
-        dec     (ix+6)
-        jr      nz,fus1
-
-        ld      c,8
-        jp      ful_abort
-
-
-; ------------------------------------------------------------
-; Definitivni chyba modulu
-; ------------------------------------------------------------
-
-fus_error:
-        ld      c,8
-        jp      ful_abort
-
-
-; ------------------------------------------------------------
-; SEND OK
-; Teprve ted smi upload pokracovat dalsim blokem.
-; ------------------------------------------------------------
-
-fus2:
-        ret
-
-
-; Pokud uz tyto texty nekde mas, pouzij samozrejme
-; existujici labely a tyto tri nepridavej.
-
-upl_sendfail:
-        db      "SEND FAIL",0
-
-upl_error:
-        db      "ERROR",0
-
-upl_closed:
-        db      "CLOSED",0
-konec noveho kodu*/
 
 fus2		ret				;upload of packets works without 20 ms pause
 ;		ei				;should be there according to manual, but works without the 20 ms pause
@@ -1656,6 +1446,8 @@ fus2		ret				;upload of packets works without 20 ms pause
 ;		ret
 ftp_upl_len	dw	#5555			
 ftp_upl_start	dw	#5555
+
+
 
 
 ;log off ftp
@@ -1697,6 +1489,7 @@ ftp_quit_connection
 ; Poznamka: Mění přenosové buffery, diskový stav a transfer_flag.
 ; --- KONEC DOKUMENTACE CZ ---
 ftp_download_file_var
+		call save_dir_position_snapshot
 		call	send_type_command_i	;switch to TYPE I (binary)
 		call	ftp_download_file_var1
 		jr	tn2
@@ -1709,6 +1502,7 @@ ftp_download_file_var
 ; Poznamka: Mění přenosové buffery, diskový stav a transfer_flag.
 ; --- KONEC DOKUMENTACE CZ ---
 ftp_download_file_new
+		call save_dir_position_snapshot
 		call	send_type_command_i	;switch to TYPE I (binary)
 		call	ftp_download_file_new1
 		jr	tn2
@@ -1725,6 +1519,7 @@ ftp_download_file_dir
 		bit	5,(ix+0)
 		ret	z			;if no connection, return
 
+		call save_dir_position_snapshot
 		call	send_type_command_i	;switch to TYPE I (binary)
 		ld	hl,(mark_counter)
 		ld	a,h
@@ -1740,6 +1535,8 @@ tn2		;call	prn_mark_items		;print zero marked items		;netreba u Sary 128K
 		call	set_3_5mhz		
 		call	passive_receive_off	;turn off passive transfer mode
 fdfm4		call	print_transfer_status	;end of download
+		bit 0,(ix+1)
+		jp z,directory_retrieve	;no valid cached view to restore
 ;		call	undraw_cursor		;dir retrieve not needed
 ;		jp	directory_retrieve	;after download or upload, dir list corrupted!!!
 						;in 128 version no dir retrieve needed
@@ -1747,14 +1544,12 @@ fdfm4		call	print_transfer_status	;end of download
 		call	unmark_all		;je po downloadu, tak polozky odoznac
 		res	6,(ix+1)		;dovol dir_move obnovit ulozenou pozici
 download_saved_page
-		ld      a,#55
-        	call    PAGE128
 		jp	dir_move5		;obnov jen obraz
 
 
 
 ;projdi adresar a oznacene soubory mrdni od #4800 (delka bufferu= #800 bajtu)
-ldir_names	call	save_dir_position_snapshot
+ldir_names
 		ld	hl,ftp_dir_start+fi_len-2	;first real directory item
 		ld	(cur_item_addr),hl
 		ld	hl,ftp_dir_page+1
@@ -1910,8 +1705,6 @@ fdf_err		jp	c,ffs1_fnf		;C=file not found
 
 fdf_cont	;call	save_dir_position	;realise in next version
 						;here go all ways of download
-		ld      a,(PAGE128_STATE)	;uloz stranku
-	        ld      (download_saved_page+1),a
 
 ;        	ld      a,dwnld_pag
 ;        	call    PAGE128
@@ -2110,9 +1903,7 @@ aft3		ld	bc,RX_buf+4		;length of file
 		scf
 		call	send_ftp_command_in_passive_mode
 
- ; save directory page and map download page 4
-        ld      a,(PAGE128_STATE)
-        ld      (download_saved_page+1),a
+ ; map download page 4; the view is preserved by save_dir_position_snapshot
         ld      a,dwnld_pag
         call    PAGE128
 
@@ -2637,6 +2428,7 @@ fl3		call	clear_edit_zone
 		ld	(dir_list_pointer),hl
 		ld hl,0
 		ld (dir_restore_item),hl
+		jp directory_retrieve		;load initial directory after successful login
 
 ; -----------------------------------------------------------------------------
 ; FTP DIRECTORY BANK API
@@ -5708,7 +5500,7 @@ prn_mark_items	ld	hl,(mark_counter)
 ; Vstup: IX = flag1; uložená původní rychlost CPU.
 ; Vystup: Nejde o běžný RET; návrat přes ROM na #1B76.
 ; Meni: AF, BC, DE, HL, IX/IY dle služeb; explicitně IY a SP.
-; Poznamka: Nastavuje Wi-Fi dle volby, ruší platnost adresáře, vypíná HGFX a povoluje přerušení.
+; Poznamka: Pri ponechani Wi-Fi zachova adresar; pri vypnuti jej zneplatni. Obnovi BASIC.
 ; --- KONEC DOKUMENTACE CZ ---
 quit_program
 
@@ -5724,7 +5516,14 @@ quit		call	set_def_wifi_speed	;set speed 7 for easier work with uart terminal
 ;		scf
 ;		call	nz,wifi_on
 
-		res	0,(ix+1)	;set dir as not read, so that it will be read once you quit Sarah to Basic and return with RAND. USR 51200
+		bit 3,(ix+0)		;keep cached directory only when Wi-Fi stays on
+		jr nz,quit_keep_directory
+		bit 0,(ix+1)
+		call nz,save_dir_cache_checksum
+		res 0,(ix+1)
+quit_keep_directory
+		bit 0,(ix+1)
+		call nz,save_dir_cache_checksum
 
 		ld	bc,#783B	;return CPU speed
 		ld	a,#30
@@ -7591,6 +7390,9 @@ chma1		dec	(ix+6)
 ; Poznamka: Cte proud do konce hledaneho textu, dalsi bajty nemaze. Hledani ma timeout.
 ; --- KONEC DOKUMENTACE CZ ---
 check_module_answer
+            ld a,(upload_legacy_mode)
+            or a
+            jp nz,upl_old_check_module_answer
             call    look_on_fly
             jr      nz,chma3
             or      a
@@ -7638,7 +7440,14 @@ rfa3		ld	hl,ok			;look for "OK"
 
 ;		halt				;testing purposes
 
-rfa2        call ftp_active_reply
+rfa2        ld a,(upload_legacy_mode)
+            or a
+            jr z,rfa_modern_reply
+            call upl_old_read_reply
+            jr rfa_parse_reply
+rfa_modern_reply
+            call ftp_active_reply
+rfa_parse_reply
             ld de,RX_buf
 		push	de			;DE=start of message to print
 		call	ConvRStr16
@@ -7761,17 +7570,25 @@ clear_TX_buf	ld	hl,TX_buf
 ;   rozhraní. SP.
 ; Poznamka: Obnovuje 3,5 MHz a vypíná pasivní příjem.
 ; --- KONEC DOKUMENTACE CZ ---
-error_handler	call	display_error
-		call	wifi_unwait
-		call	set_3_5mhz
-		call	passive_receive_off	;hope it does not affect other routines
-;error_handler1	call	wifi_unwait
-;		ld	a,c
-;		cp	4
-;		jp	z,server_connection_error		
-		ld 	sp,basic_end-2	;Busy's universal solution. Jump back to "error_handler_loop"
-		ret
-
+error_handler xor a
+           ld (upload_legacy_mode),a
+           push bc                ;preserve original error across clock switch
+           call set_3_5mhz
+           pop bc
+           ld a,(error_recovering)
+           or a
+           jr nz,error_handler_exit ;cleanup itself failed: do not recurse again
+           inc a
+           ld (error_recovering),a
+           call display_error
+           call wifi_unwait
+           call passive_receive_off ;one best-effort cleanup attempt only
+error_handler_exit
+           xor a
+           ld (error_recovering),a
+           ld sp,basic_end-2
+           ret
+error_recovering db 0
 ; --- DOKUMENTACE CZ: display_error ---
 ; Ucel: Vypíše číslo chyby a počká na potvrzení klávesou.
 ; Vstup: C = číslo chyby; IX = flag1.
@@ -7845,7 +7662,12 @@ cs_con_buf	ld	hl,TX_buf		;send it
 		ld	c,3
 		jp	nz,error_handler
 
-		ld	hl,ok		;docteme i OK za oznameni CONNECT
+		ld hl,ok
+		ld a,(upload_legacy_mode)
+		or a
+		jr z,cs_wait_answer
+		ld hl,CONNECT
+cs_wait_answer
 ;		ld	de,CONNECT		;check for answer
 		jp	check_module_answer
 
@@ -8082,23 +7904,8 @@ cipsend_lod	ld	hl,at_cipsend	;send "AT+CIPSEND="
 ;	konec diagnostiky*/
 
 
-        ld      hl,char_zob
-        call    check_module_answer
-        ret     nc              ; > nalezen, hotovo
-
-        ; první čtení mohlo dostat jen "OK",
-        ; zkus ještě jednou počkat na >
-        ld      hl,char_zob
-        jp      check_module_answer
-
-
-
-		ld	hl,char_zob	;new concept
-;		ld	de,char_zob	;Wifi module returned ">" to show readiness to accept?
-		jp	check_module_answer
-;		call	check_module_answer	;show error, if any
-;		jp	c,ret2main_scr	;was error
-;		ret
+		ld hl,char_zob
+		jp check_module_answer
 
 ;69) display_progress	prints length of file each time file is loaded/saved, length taken from rest_len
 ; --- DOKUMENTACE CZ: display_progress ---
@@ -9501,8 +9308,19 @@ stc1		call	clear_inp_buf
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; --- KONEC DOKUMENTACE CZ ---
 print_whole_screen
-		call	cls_4000
+        call cls_4000
+        call print_screen_layout
+pws2    bit 0,(ix+1)
+        jp nz,print_working_directory
+pws1    jp print_title
 
+;Do not issue PWD on startup until the session has been checked.
+print_start_screen
+        bit 0,(ix+1)
+        call nz,check_dir_cache_checksum
+        call print_screen_layout
+        jp print_title
+print_screen_layout
 		ld	de,menu1
 		ld	hl,txt_adr_menu1
 		call	PRINTHL			;print menu line 1
@@ -9516,10 +9334,53 @@ print_whole_screen
 		call	prn_file_start		;print line 17 with filename and start address
 		call	prn_host_usr_psw	;print line 18 with host, user, password
 
-pws2		bit	0,(ix+1)		;directory or header?
-		jp	nz,print_working_directory
-pws1		jp	print_title
+		ret
 
+;16-bit byte sum of directory RAM 0 (#C000-#FFFF). Does not change fdp_pointer.
+;Restores the previously mapped bank; DE=sum, AF/BC/HL changed.
+dir_cache_checksum
+        ld a,(PAGE128_STATE)
+        push af
+        xor a
+        call PAGE128
+        ld hl,ftp_dir_start
+        ld bc,#4000
+        ld de,0
+.next   ld a,(hl)
+        add a,e
+        ld e,a
+        jr nc,.no_carry
+        inc d
+.no_carry
+        inc hl
+        dec bc
+        ld a,b
+        or c
+        jr nz,.next
+        pop af
+        call PAGE128
+        ret
+save_dir_cache_checksum
+        call dir_cache_checksum
+        ld (dir_cache_sum),de
+        ret
+check_dir_cache_checksum
+        call dir_cache_checksum
+        ld hl,(dir_cache_sum)
+        or a
+        sbc hl,de
+        ret z
+        res 0,(ix+1)               ;RAM changed in BASIC: request fresh listing
+        ret
+dir_cache_sum dw 0
+;Redraw cached view without consuming history or changing cursor position.
+resume_directory_screen
+        call print_working_directory
+        call print_dir_files_items
+        ld de,menu_dir
+        ld hl,txt_adr_dir_info+22
+        call PRINTHL
+        jp dir_move4
 	IFDEF hgfx64x24
 ;95) set_fdma_to_chars	
 ; --- DOKUMENTACE CZ: set_fdma_to_chars ---
@@ -9902,6 +9763,7 @@ buffers_len	equ $-RX_buf
 	ENDIF
 
 	include "ftp_directory_io.asm"
+	include "ftp_upload_legacy.asm"
 
 bios_start
 		INCBIN "WifiBios20_MB_EL.cod"

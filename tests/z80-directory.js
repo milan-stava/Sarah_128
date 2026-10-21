@@ -37,7 +37,7 @@ function makeCpu(code, bios, S, options={}) {
  case 0x11:{let n=word();d=n>>8;e=n&255;break;}
  case 0x77:m[hl()]=a;break;case 0x73:m[hl()]=e;break;case 0x36:m[hl()]=m[pc++];break;
  case 0x12:m[de()]=a;break;
- case 0x37:cf=true;break;
+ case 0x37:cf=true;break;case 0x3f:cf=!cf;break;
  case 0xcd:{let addr=word();stack.push(pc);pc=addr===S.rece_byte?0xe0d7:addr===S.send_byte?0xe0ed:addr;break;}
  case 0xc3:{let addr=word();pc=addr===S.rece_byte?0xe0d7:addr;break;}
  case 0xca:{let addr=word();if(z)pc=addr;break;}
