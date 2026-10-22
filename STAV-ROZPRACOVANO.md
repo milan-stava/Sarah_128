@@ -1,4 +1,27 @@
-# Zakonzervovany stav — 22. 10. 2026
+# Predtestovy checkpoint Wi-Fi — 22. 10. 2026
+
+Aktualizace po checkpointu `5c865b3`: uzivatel povolil opravy sdileneho Wi-Fi
+protokolu. Sdileny parser a nasledne opravy inicializace jsou implementovane;
+podrobnosti a meze jsou v `tests/wifi-protocol-audit.md`. BSDOS sestaveni bez
+chyb/varovani, 1 630 automatickych kontrol proslo. Proti checkpointu +1 407 B,
+volno do #BFE0 6 711 B. Etapa inicializace pridala 195 B; nasledne odstraneni
+dvou volani prazdneho print_bauds a jeho RET usetrilo 7 B. Dokonceni/preruseni
+downloadu bylo prevedeno na spolecny parser (+160 B).
+Tento predtestovy checkpoint uchovava zmeny pred overenim na skutecnem stroji.
+Upload zustava nefunkcni a jeho telo/legacy parser nebyly prepsany.
+Nize je historicky zaznam checkpointu; puvodni pozastaveni Wi-Fi auditu uz
+neplati. Inicializace rychlosti byla proverena a opravena; vyber/pripojeni AP
+neni v tomto sestaveni aktivni. Download uz pri abortu nepouziva stary prijem
+uploadu; ceka na kompletni ABOR a NOOP, pak zavre data a opusti pasivni rezim.
+Zbyva overeni na stroji a odlozeny upload. Neni tvrzeno, ze je kompletni
+komunikace overena na hardwaru.
+
+Pri realnych testech zachytit surove UART bajty pokud mozno v obou smerech
+vcetne casovych znacek a soucasne log FileZilla Serveru. Overit start/login,
+LIST a vnorovani, download, B behem downloadu i tesne pred dokoncenim,
+nasledny LIST/dalsi download a Q/RANDOMIZE USR.
+
+## Historicky stav checkpointu 5c865b3
 
 Tento commit je pracovni checkpoint. **Upload neni funkcni a neni pripraven k vydani.**
 Na zadost uzivatele je prace nyni zastavena; dalsi zmeny az po domluve.

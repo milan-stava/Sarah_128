@@ -49,6 +49,7 @@ function uploadResponseRegression(makeCpu,image,bios,S) {
    if(pc===S.passive_receive_off){cleanups++;if(!failedCleanup)return {ret:true};}
    if(pc===S.error_handler_exit+4){assert(r.m[S.error_recovering]===0&&r.m[S.upload_legacy_mode]===0,'recovery and upload modes reset');throw stop;}
   });
+  u.m[S.flag1]|=64; // This test starts during an initialized FTP session.
   if(failedCleanup)u.m.set([0x0e,39,0xc3,S.error_handler&255,S.error_handler>>8],S.passive_receive_off);
   try{u.call(S.error_handler,{bc:16});throw Error('missing exit');}catch(e){if(e!==stop)throw e;}
   assert(displays===1&&cleanups===1,'cleanup attempted once, no recursive error loop');

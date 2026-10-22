@@ -32,7 +32,7 @@ function directoryRegression(makeCpu,image,bios,S) {
  }
  {
   let u=cpu();u.m[S.TX_buf]=0xa5;u.rx.push(...gap('x'.repeat(400)+'\r\n'));
-  u.call(S.ftp_read_line);
+  u.call(S.at_next_event);
   assert(str(u.m,S.RX_buf).length===127&&u.m[S.TX_buf]===0xa5,'bounded line buffer');
  }
  for(const n of [1,10,128,2048,65535]) {
@@ -80,15 +80,15 @@ function directoryRegression(makeCpu,image,bios,S) {
   u.rx.push(...gap('SEND OK\r\n\r\n+IPD,0,'+reply.length+':'+reply+'NEXT',5));
   const r=u.call(S.receive_ftp_answer_isolated,{de:227});
   assert(!r.carry&&r.hl===227&&r.de===0,'fragmented active PASV reply');
-  assert(u.m[S.TX_buf]===0xa5,'active reply stays inside RX buffer');
+  assert(str(u.m,S.TX_buf)===reply&&str(u.m,S.RX_buf)===reply,'active reply retains RX caller interface');
   assert(String.fromCharCode(...u.rx.filter(x=>x!==null))==='NEXT','active reply exact length');
  }
  {
   let caught=false,u=cpu({hook:(pc,r)=>{if(pc===S.error_handler){caught=(r.bc&255)===49;throw 'expected-error';}}});
-  u.rx.push(...bytes('SEND OK\r\n\r\n+IPD,0,128:'+'x'.repeat(128)));
-  u.m[S.TX_buf]=0xa5;
+  u.rx.push(...bytes('SEND OK\r\n\r\n+IPD,0,130:'+'x'.repeat(128)+'\r\n'));
+  u.m[S.TX_buf+128]=0xa5;
   try{u.call(S.receive_ftp_answer_isolated,{de:227});}catch(e){if(e!=='expected-error')throw e;}
-  assert(caught&&u.m[S.TX_buf]===0xa5,'oversized active response cannot corrupt TX buffer');
+  assert(caught&&u.m[S.TX_buf+128]===0xa5,'oversized active response cannot corrupt TX buffer');
  }
  {
   const reply='227 Entering Passive Mode (192,168,0,105,200,1)\r\n';
@@ -141,7 +141,7 @@ function directoryRegression(makeCpu,image,bios,S) {
    if(pc===S.error_handler)throw Error('empty-directory error '+r.bc);
    if(pc===S.KEYSCAN)return {ret:true,a:0};
    if(pc===S.data_available_in_module_dir)return {ret:true,hl:0,z:true};
-   if(pc===S.ftp_query_lengths){queries++;return {ret:true,hl:0,de:25};}
+   if(pc===S.ftp_query_lengths){queries++;if(queries>=2)r.m[S.at_closed]|=2;return {ret:true,hl:0,de:25};}
    if(pc===S.ask_for_reply_in_passive_mode)return {ret:true,hl:226};
    if(pc===S.dr_end_ok){finished=true;assert(r.stack.length===0,'EOF removes exactly dr_get_data return');throw stop;}
   }});

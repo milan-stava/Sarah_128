@@ -544,9 +544,11 @@ port_select	equ	#703B
 	;30=speed management: failed, probably Wifi module wrongly set,fix in terminal-add it in the next ver... present in the code but not used
 	;31=user defined speed_ AT+UART_CUR command not sent			...???
 	;32=user defined routine_ speed in UART not set				...???
-	;33=user defined speed_ you try to set nonsence speed (ie. > 23)	...???
+	;33=user defined speed_ index outside speed_table (valid: 0-16)	...???
 	;48= timeout pri cteni UART/AT odpovedi
 	;49= neplatna/neocekavana odpoved nebo prilis dlouha aktivni FTP zprava
+	;50= Wi-Fi modul je busy behem hledani/overovani rychlosti
+	;51= modul nepotvrdil vypnuti echa pri inicializaci
 	;34= dir retrieve error
 	;35= (look_for_ipd) 2nd error
 	;36= error in receive_ftp_answer
@@ -643,6 +645,8 @@ printyesno1	ld	(hl),a
 
 		set	4,(ix+0)		;set flag to print info in speed management
 		call	speed_management
+		bit 6,(ix+0)
+		jp z,quit_keep_directory ;do not issue commands at an unknown baud rate
 		call	print_start_screen	;layout only: verify connection before PWD
 
 
@@ -672,10 +676,8 @@ printyesno1	ld	(hl),a
 		ld	(item_checksum),hl	;signal dir start from begining
 
 		ld	hl,at_cwmode
-		call	send_string		;set module to station mode (CWMODE=1)
-		ld	hl,ok
-		call	look_on_fly
-		jr	z,error_handler_loop
+		call at_send_ok
+		jr nc,error_handler_loop
 		ld	c,2
 		jp	error_handler
 
@@ -706,12 +708,10 @@ kl3		cp	"3"
 
 						;NZ=status "2" or "4"- continue to CIPMUX
 kl4		ld	hl,at_cipmux		;!!!!!!!!we re not connected to ftp server
-		call	send_string
-		ld	hl,ok
-		call	look_on_fly
+		call at_send_ok
 ;		jr	z,key_loop
 		ld	c,3
-		jp	nz,error_handler
+		jp c,error_handler
 
 kl_alogin	bit	1,(ix+0)		;carry out autologin? ;bit 1=login to server,0=automatic, 1=manual
 		jp	z,auto_login
@@ -832,27 +832,18 @@ kl6		and	a			;check module, if it brings any data. Yes? Print them for the momen
 		call	rece_byte
 		jp	z,key_loop
 
-kl8		ld	hl,RX_buf		;data avialable, accept them
-		ld	bc,buffers_len/2
-		push	hl
-		call	receive_data_timeout
-		pop	hl			;omit IPDs....etc
-		ld	de,dvojt		;if code 421 returned check connection
-		call	look_for_string
-		jr	nz,kl9
-;		jp	nz,key_loop
-
-		push	de
-		ld	h,d
-		ld	l,e
-		call	print_ftp_message
-
-		pop	de
-		call	ConvRStr16
-		ld	de,421
-		or	a
-		sbc	hl,de
-		jp	z,error_handler_loop	;code is 421, check connection
+kl8     call at_next_event
+        cp AT_IPD
+        jr nz,kl9
+        call ftp_active_reply
+        push hl
+        ld hl,RX_buf
+        call print_ftp_message
+        pop hl
+        ld de,421
+        or a
+        sbc hl,de
+        jp z,error_handler_loop
 kl9		xor	a			;A=0 to return to key_loop
 		jp	key_loop
 
@@ -881,7 +872,7 @@ kl9		xor	a			;A=0 to return to key_loop
 ;bit 6,(ix+0)	state of speed alignment between uart& module, 0 not aligned
 ;bit 5,(ix+0)	state of module connection to AP, 0 not connected to AP
 
-;internal subroutines: switch_speed, print_bauds, find_out_speed
+;internal subroutines: switch_speed, find_out_speed
 ;external subroutines: send_at:check_ok, set_ud_speed, set_print_speed, print_speed
 
 ; --- DOKUMENTACE CZ: speed_management ---
@@ -930,7 +921,7 @@ speed_management
 		ld	bc,29			;solve in next versions
 ;		jr	nz,speed_uart_err
 
-speed_uart_err	call	print_bauds		;print speed in bauds even if speed no communicate
+speed_uart_err
 
 		ld	de,module_no_aswer
 		call	print_ez1
@@ -947,6 +938,7 @@ sme1		call	akey
 
 ;zde jsme ze zacatku rychlost nasli a zkoumame, zda je to ta, kterou chceme, pokud ne, tak ji nastav
 speed_aligned	call	find_out_speed		;output: D= currently aligned speed
+        jp c,speed_uart_err
 align_success	call	set_ud_speed
 
 ;ve speed_we_want vyhodnotit, zda je odezva na AT prikaz. Pokud ne, neznamená to, e
@@ -956,23 +948,21 @@ speed_we_want	ld	(ix+6),#A
 		jr	nz,speed_uart_err
 
 wifi_cont					;we are at speed we want. Final steps... print UART speed+ Baud speed
-		set	6,(ix+0)		;signal, that uart and module speed is aligned
+;Alignment is recorded only after the final ATE0 acknowledgement.
 
 ;		call	get_baud
 		call	find_out_speed
+        jp c,speed_uart_err
 		ld	a,d			;A=aligned speed we ended with
 		ld	(ix+7),a		;save it
 		call	print_speed
-		call	print_bauds
 
-		ld	hl,ate0
-		call	send_string
-		ld	hl,ok
-		jp	look_on_fly
-;		call	look_on_fly
-		;test for answer should be here?
-;		ret		
-
+        ld hl,ate0
+        call at_send_ok
+        ld c,51
+        jp c,error_handler
+        set 6,(ix+0)
+        ret
 ;SM2.0 subroutines
 ; --- DOKUMENTACE CZ: find_out_speed ---
 ; Ucel: Zjistí index aktuální rychlosti UART, případně rychlosti vyzkouší.
@@ -982,14 +972,19 @@ wifi_cont					;we are at speed we want. Final steps... print UART speed+ Baud sp
 ; Poznamka: Při nepodporovaném get_baud používá switch_speed; jeho neúspěch nepovažujte za
 ;   platnou rychlost.
 ; --- KONEC DOKUMENTACE CZ ---
-find_out_speed					;subroutine is able to find out current speed for all MBFW, output in D
-		call	get_baud		;we are at aligned speed, is the one we want?
-		jr	nc,fos1			;C=speed reading not supported by given MBFW
-		call	switch_speed		;in case of MBFW 7, 12-> find out currently aligned speed
-		ld	a,d
-fos1		ld	d,a			;D=curently aligned speed
-		ret
-
+find_out_speed
+        call get_baud
+        jr nc,.known
+        call switch_speed
+        jr nz,.failed
+        ld a,d
+.known  cp 24
+        jr nc,.failed
+        ld d,a
+        or a
+        ret
+.failed scf
+        ret
 						;tests speeds <7-0>, then <max-8>
 ;switch_speed	ld	a,7			;start with speeds 7-0 (quicker finds the speed)
 ;		call	sws2
@@ -1006,8 +1001,7 @@ switch_speed	ld	a,(ix+8)		;try out every speed if you find connection UART+Wifi
 						;start with max speed, end with 0
 sws2		push	af
 		call	set_print_speed
-
-		call	clear_rece_buf		;very important to clear receive buffer!!!
+		jr c,sws_unsupported ;do not report a UART setting rejected by BIOS
 
 		pop	af			;we need to inrease timeout for speeds <3
 		push	af
@@ -1019,20 +1013,15 @@ sws2		push	af
 sws1		call	send_at_check_ok
 		pop	de
 		ret	z			;Z=answer found, D= speed set in HW
-		ld	a,d
+sws_next ld	a,d
 		dec	a
 		cp	255			;test for 255, so that also speed 0 is tested
 		jr	nz,sws2
 		dec	a			;NZ=not successfull
 		ret
+sws_unsupported pop de
+        jr sws_next
 
-; --- DOKUMENTACE CZ: print_bauds ---
-; Ucel: Rezervovaný vstup pro výpis rychlosti v baudech.
-; Vstup: Žádný.
-; Vystup: Okamžitý návrat; aktivní implementace je pouze RET.
-; Meni: Žádné.
-; --- KONEC DOKUMENTACE CZ ---
-print_bauds	ret
 /*
 print_bauds	call	get_baud		;print speed in Bauds...solved in bios 1.8
 		push	de			;E=number of zeros. If MBFW=7 or 12, zeros speed in Bd is printed
@@ -1938,7 +1927,6 @@ fdfm2		ld	a,(transfer_flag)
 		jr	fdfm3
 
 fdfm1		call	save_close		;successful end, file downloaded completely
-		call	clear_rece_buf
 fdfm3		ld	ix,flag1
 		ret
 
@@ -1956,22 +1944,7 @@ fdf_loop	call	KEYSCAN
 fdf_loop_err	call	delete_file		;in case of abbort, delete the file from MB disk.
 		ld	ix,flag1
 ;		ld	c,20
-fdfm7		call	passive_receive_off
-		ld	hl,at_cipclose1		;close data channel
-		call	send_string
-		ld	hl,RX_buf
-		ld	bc,#80
-		push	hl
-		push	bc
-		call	receive_data_timeout
-		pop	bc
-		pop	hl
-		ld	de,dvojt
-		call	look_for_string
-		ex	de,hl
-		call	print_ftp_message
-		ld	c,20
-		jp	ful_abort		
+fdfm7       jp ftp_abort_download
 
 fdf6		ld	hl,ftp_dir_start	;loop, that downloads and saves 1x buffer, or less
 		ld	(buff_add_float),hl
@@ -2044,15 +2017,19 @@ fdf_sub1	call	ask_for_data_in_passive_mode
 		ld	hl,(buff_add_float)	;HL=buffer start
 		ld	de,#FFFF
 		call	rece_block		;receive bytes
-		ld	c,23
 		jr	c,fdf_sub11
-
+		push bc                  ;BIOS returns the unread part of the payload
+		ld c,23
 		call	display_error
+		pop bc
+		call ftp_discard_payload  ;finish this binary frame before any AT/ABOR
 		jp	fdf_loop_err
 ;		jp	nc,error_handler
 fdf_sub11	ld	(buff_add_float),hl
 
-		jp	clear_rece_buf
+		call ftp_wait_terminal
+		jp c,ftp_frame_error
+		ret
 
 ;clearni_RXko	call	clear_RX_buf		;tato rutina zpomalovala download souboru z 60 na 33 kb/sec
 ;		ld	bc,#80
@@ -3492,8 +3469,11 @@ drgd1       ld b,128
             jr nz,.more_data
             ld a,(ix+23)
             or a
-            jr z,.done
-            ld a,(ftp_control_left)
+            jr nz,.control
+            ld a,(at_closed)
+            bit 1,a
+            jr nz,.done
+.control    ld a,(ftp_control_left)
             or d
             or e
             jr nz,.reply
@@ -6372,50 +6352,39 @@ lldec	=	eedec-zzdec
 ; Poznamka: Mění RX_buf a (IX+6); chyba odeslání přechází do error_handler.
 ; --- KONEC DOKUMENTACE CZ ---
 send_at_check_ok
-		call	wifi_wait
-		ld	hl,at
-		call	send_string
-		ld	bc,28
-		jp	nz,error_handler
-;		jp	nz,error
-
-;		ld	de,#100			;when it is away, it speeds up the search significantly
-;		call	wait_short_def
-
-		ld	hl,RX_buf
-		ld	bc,20
-		push	hl
-		push	bc
-		ld	de,RX_buf+1		;clear RX_buf before reading bytes to it
-		ld	(hl),0
-		ldir
-		pop	bc
-		pop	hl
-		push	hl
-		push	bc
-		call	receive_data_timeout	;much quicker than look_on_fly
-;		pop	bc
-;		pop	hl
-		call	wifi_unwait
-		pop	bc
-		pop	hl
-		ld	de,ok
-;		jp	look_for_string
-		call	look_for_string
-		ret	z
-		dec	(ix+6)
-		jr	nz,send_at_check_ok
-		inc	c			;NZ=OK not found
-		ret
-
+        call wifi_wait
+        ld a,(ix+6)
+        or a
+        jr nz,.attempt
+        inc (ix+6)
+.attempt call at_probe_drain
+        jr c,.failed
+        ld hl,at
+        call send_string
+        ld c,28
+        jp nz,error_handler
+        call at_probe_ok
+        jr z,.done
+        cp AT_BUSY
+        jr z,.busy
+        dec (ix+6)
+        jr nz,.attempt
+.failed ld a,1
+        or a
+.done   push af
+        call wifi_unwait
+        pop af
+        ret
+.busy   ld c,50
+        jp error_handler
 
 ;40) OUT CY 0=OK, 1= speed not supported, set and print UART speed
 ; --- DOKUMENTACE CZ: set_print_speed ---
-; Ucel: Nastaví index rychlosti UART a vypíše jej.
+; Ucel: Nastavi index rychlosti UART a vypise jej.
 ; Vstup: A = index rychlosti pro set_baud.
-; Vystup: Vrací A/F uložené před set_baud, ovšem po SCF; Carry tedy zůstává nastaven.
-; Meni: BC, DE, HL dle set_baud a tisku; A zachován, F má nastavený Carry.
-; Poznamka: Původní poznámka o Carry jako výsledku set_baud neodpovídá PUSH AF / POP DE.
+; Vystup: A = pozadovany index, Carry = skutecny vysledek set_baud.
+; Meni: BC, DE, HL dle set_baud a tisku.
+; Poznamka: POP DE obnovi index do D bez zmeny F; print_speed zachova AF.
 ; --- KONEC DOKUMENTACE CZ ---
 set_print_speed	scf
 		push	af
@@ -6821,7 +6790,7 @@ prn_sig_txt	call	PRINT
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; Poznamka: Používá AT+CIPSTATUS; nevyhovující předchozí spojení může uzavřít.
 ; --- KONEC DOKUMENTACE CZ ---
-get_status_ftp	call	clear_rece_buf
+get_status_ftp
 
 		ld	de,STATUS
 		ld	hl,txt_adr_speed_login+27
@@ -6832,34 +6801,16 @@ get_status_ftp	call	clear_rece_buf
 ;		ld	bc,1
 ;		jp	nz,speed_m_error	;spatne, zasobnik!!!
 
-		ld	hl,RX_buf		;receive the answer about STATUS to RX_buf
-		ld	bc,#80
-		push	hl
-		push	bc
+        jp nz,cr_err
+        call at_status_response
+        ld hl,RX_buf
+        ld bc,128
+        push hl
+        push bc
+        jr nc,gs5
+        pop bc
+        pop hl
 
-/*
-		ld	a,(ix+2)
-		cp	3
-		jr	nc,gs1
-		ld	de,#500			;experimental timeout, it works!!
-		call	receive_data1		;for speeds <3 we need bigger receive timeout
-		jr	gs2		
-*/
-
-gs1		call	receive_data_timeout
-
-gs2		pop	bc		;BC=#80
-		pop	hl		;HL=RX_buf
-
-		push	hl
-		push	bc
-		ld	de,ok		;look for OK in the answer
-		call	look_for_string
-		jr	z,gs5
-
-
-		pop	hl		;OK not found
-		pop	bc
 gs4		ld	de,unknown	;STATUS not found
 		ld	hl,txt_adr_speed_login+35
 		jp	PRINTHL
@@ -7107,10 +7058,15 @@ set_ud_speed
 		inc	a
 		jr	z,set_mspeed_mbfw
 		dec	a
-		jr	set_ud_speed_a
+		ld b,a
+		ld a,(ix+8)
+		cp b
+		jr c,set_mspeed_mbfw ;configured preference exceeds the available UART
+		ld a,b
+		jr set_ud_speed_a
 set_mspeed_mbfw	ld	a,(ix+8)		;A=max speed allowed for given MBFW
-		cp	23
-		jr	nz,set_ud_speed		;if 23, change it to 16 (max speed for module)
+		cp	17
+		jr	c,set_ud_speed_a		;speed_table contains indices 0..16
 		ld	a,16
 
 ; --- DOKUMENTACE CZ: set_ud_speed_a ---
@@ -7121,9 +7077,15 @@ set_mspeed_mbfw	ld	a,(ix+8)		;A=max speed allowed for given MBFW
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; Poznamka: Používá speed_table, TX_buf a konfigurační příznaky.
 ; --- KONEC DOKUMENTACE CZ ---
-set_ud_speed_a	cp	24			;check if speed is within 0-23
+set_ud_speed_a	cp	17			;only entries actually present in speed_table
 		ld	bc,33
-		jr	nc,suds5		;NC=speed >23, error
+		jr	nc,suds5		;NC=index outside speed_table
+		ld b,a
+		ld a,(ix+8)
+		cp b
+		ld a,b
+		ld c,32
+		jp c,error_handler ;validate host UART before changing the module
 						
 		ld	b,a			;A=speed to which we want align UART and module
 		ld	c,b			;C=speed to which we want align UART and module
@@ -7170,33 +7132,31 @@ suds3		ld	a,(hl)
 		ex	de,hl
 		ld	(hl),0
 		
-		pop	hl
-		call	send_string	;set user defined speed on the module via AT+UART+CUR
-
-		ld	hl,ok		;for speeds<3 seems to work
-		call	look_on_fly	;correct answer OK means, we aligned speeds sucesfully
-
-		pop	de
-		ld	bc,31		;OK not received in answer
-		jr	nz,suds1
-		
-
-		ld	a,e			;A= UART speed we want
-		call	set_print_speed		;set the desired speed in UART
-		ret	nc			;NC=set sucessfully
-
-		ld	bc,32
-
-suds1		push	bc
-		ld	a,e
-		call	set_print_speed
-		call	print_bauds
-		pop	bc
-
-suds5		pop	hl
-		jp	error_handler
-;		jp	error
-
+        pop hl
+        call send_string
+        jr nz,suds_send_fail
+        call at_probe_ok          ;firmware may switch baud before its OK arrives
+        pop de                    ;E=requested UART index
+        jr nc,suds_install
+        or a
+        jr nz,suds_rejected       ;explicit ERROR/busy: keep the old UART baud
+suds_install
+        ld a,e
+        call set_print_speed
+        ld c,32
+        jp c,error_handler
+        ld (ix+6),2
+        call send_at_check_ok     ;confirm communication at the new baud rate
+        ld c,31
+        jp nz,error_handler
+        xor a
+        ret
+suds_send_fail
+        pop de
+suds_rejected
+        ld c,31
+        jp error_handler
+suds5   jp error_handler
 
 ;58) sends abort command (in order to abort existing command and get unstuck)
 ;send_ftp_command is the main routine that sends command+ string if needed and returns ftp answer code
@@ -7330,7 +7290,6 @@ csr1		call	send_string
 		jr	receive_ftp_answer
 
 cr_err		call	set_3_5mhz
-		call	passive_receive_off	;hope, it will not affect other routines
 		ld	c,1		;error in sending string
 		jp	error_handler	;pozor, toto pouziva hodne rutin
 
@@ -7393,10 +7352,13 @@ check_module_answer
             ld a,(upload_legacy_mode)
             or a
             jp nz,upl_old_check_module_answer
-            call    look_on_fly
-            jr      nz,chma3
-            or      a
-            ret
+            ld de,char_zob
+            or a
+            sbc hl,de
+            ld a,AT_OK
+            jr nz,.wait
+            ld a,AT_PROMPT
+.wait       jp at_wait_event
 chma3       scf
             ret
 ;61) !!!"receives_ftp_answer" is a part of send_ftp_command routine. Programs enters it with 2 byte ftp code on the stack!!!
@@ -7428,7 +7390,14 @@ receive_ftp_answer				;new concept
 ;		ld	(ix+6),2		;was 0	
 ;		push	hl			;HL=code number we want
 		call	clear_RX_buf
-rfa3		ld	hl,ok			;look for "OK"
+rfa3		ld a,(upload_legacy_mode)
+		or a
+		jr nz,rfa_legacy_wait
+		call at_wait_send
+		ld c,36
+		jp c,error_handler
+		jr rfa2
+rfa_legacy_wait ld	hl,ok			;look for "OK"
 		call	look_on_fly		;lasts 4 seconds. 1x attempt is enough
 		jr	z,rfa2
 ;		dec	(ix+6)
@@ -7447,6 +7416,18 @@ rfa2        ld a,(upload_legacy_mode)
             jr rfa_parse_reply
 rfa_modern_reply
             call ftp_active_reply
+            push hl
+            ld hl,ftp_reply_line
+            call print_ftp_message
+            pop hl
+            pop bc
+            or a
+            sbc hl,bc
+            add hl,bc
+            ld de,0
+            jp nz,sfcerr3
+            xor a
+            ret
 rfa_parse_reply
             ld de,RX_buf
 		push	de			;DE=start of message to print
@@ -7582,10 +7563,15 @@ error_handler xor a
            ld (error_recovering),a
            call display_error
            call wifi_unwait
+           call at_reset_stream
+           bit 6,(ix+0)
+           jr z,error_handler_exit ;no cleanup AT commands at an unknown baud
            call passive_receive_off ;one best-effort cleanup attempt only
 error_handler_exit
            xor a
            ld (error_recovering),a
+           bit 6,(ix+0)
+           jp z,quit_keep_directory
            ld sp,basic_end-2
            ret
 error_recovering db 0
@@ -7684,6 +7670,8 @@ cs_wait_answer
 ; Poznamka: Mění RX_buf, TX_buf, block_asci a počitadlo (IX+6).
 ; --- KONEC DOKUMENTACE CZ ---
 enter_passive_mode
+		ld hl,at_closed
+		res 1,(hl)
 		ld	hl,ftp_pasv
 		xor	a			;A=0=command only
 		ld	de,227
@@ -8313,33 +8301,29 @@ clear_ini_keyl	call	clear_edit_zone
 initsp_keyloop	ld	sp,basic_end-2
 		jp	key_loop
 
-fl2	;;	call	get_status_ftp
-
-		ld	h,high txt_adr_ftp_reports-2
-		ld	l,0
-		ld	(HLKO+1),hl
-		ld	hl,RX_buf
-		ld	bc,buffers_len
-		push	hl
-		push	bc
-		call	receive_data_timeout
-
-fl21		pop	bc			;BC=length to be serached
-		pop	hl			;HL=start adress to be searched
-		ld	de,dvojt
-		call	look_for_string
-		call	nz,wifi_unwait
-		ret	nz
-;		jr	nz,fl_usr_psw
-		push	de			;DE=byte after found string
-		push	bc
-		call	PRINT
-		ld	hl,HLKO+1
-		ld	(hl),0
-		inc	hl
-		inc	(hl)			;increase line number
-		jr	fl21
-
+fl2     ld h,high txt_adr_ftp_reports-2
+        ld l,0
+        ld (HLKO+1),hl
+        ld b,2                   ;optional 120, then complete 220 greeting
+.next   push bc
+        call ftp_active_reply
+        push hl
+        ld hl,RX_buf
+        call print_ftp_message
+        pop hl
+        pop bc
+        ld de,220
+        or a
+        sbc hl,de
+        jr z,.ready
+        add hl,de
+        ld de,120
+        or a
+        sbc hl,de
+        jp nz,server_connection_error
+        djnz .next
+        jp server_connection_error
+.ready  jp wifi_unwait
 ;80) for login and auto login purposes, OUT=Z=old connection same as new, NZ=proceed to connection
 ; --- DOKUMENTACE CZ: test_ftp_connection ---
 ; Ucel: Porovná požadovaný a současný server, případně nabídne odpojení.
@@ -8389,10 +8373,8 @@ ret2main_scr	call	passive_receive_off	;hope, it does not affect other routines
 logoff_current				;end current session
 		call	ftp_quit_connection	;send QUIT command
 		ld	hl,at_cipclose5
-		call	send_string
-		ld	hl,ok
-		call	look_on_fly
-		jp	nz,cr_err		;all closed, now proceed to new connection
+        call at_send_ok
+		jp	c,cr_err		;all closed, now proceed to new connection
 		call	clear_edit_zone
 		inc	b			;set NZ
 		ret
@@ -8447,6 +8429,8 @@ send_ftp_command_in_passive_mode
 		push af
 		xor a
 		ld (ftp_control_left),a
+		ld de,ftp_control_buffer
+		ld (ftp_control_next),de
 		pop af
 		ld	de,TX_buf
 ;		ld	bc,5
@@ -8473,8 +8457,7 @@ sfcpm1		ld	hl,eol
 		ld	bc,3
 		ldir
 
-;;;koko
-		call	clear_rece_buf
+;No UART flush: incoming socket events belong to the common receiver.
 
 		ld	hl,at_cipsend
 		call	send_string
@@ -8525,9 +8508,8 @@ cr11		ld	hl,TX_buf-3
 		jp	nz,cr_err
 
 ;		ld	(ix+6),3	;was 0
-sfcip3		ld	hl,sendok
-		call	look_on_fly
-		jr	z,sfcip4
+sfcip3		call at_wait_send
+		jr nc,sfcip4
 ;		dec	(ix+6)
 ;		jr	nz,sfcip3
 sfcip_err	ld	c,37
@@ -8670,7 +8652,6 @@ ask_for_data_in_passive_mode
 		push	bc			;BC=rest_chunk
 		ld	(rest_chunk),bc
 
-		call	clear_rece_buf
 ;		call	clearni_RXko		;vycisti pripadne prichozi IPDs
 
 		ld	hl,block_asci
@@ -8697,13 +8678,7 @@ ask_for_data_in_passive_mode
 		call	send_string
 		jp	nz,cr_err
 
-		ld	hl,ciprecvdata
-		call	look_on_fly
-		jr	z,afdipm3
-		ld	c,37
-		jp	error_handler
-
-afdipm3     call ftp_read_length
+afdipm3     call at_wait_data
             ld a,h
             or l
             jp z,ftp_frame_error
@@ -8725,27 +8700,14 @@ afdipm3     call ftp_read_length
 ; Poznamka: Sdili TX_buf pro radek, RX_buf pro AT; transportni chyby resi error_handler.
 ; --- KONEC DOKUMENTACE CZ ---
 ask_for_reply_in_passive_mode
-            ld hl,ftp_reply_line
-            ld b,127
-.afr_next   call ftp_control_byte
-            ld c,a
-            ld a,b
-            or a
-            ld a,c
-            jr z,.afr_discard
-            ld (hl),a
-            inc hl
-            dec b
-.afr_discard cp #A
-            jr nz,.afr_next
-            ld (hl),0
-            ld de,ftp_reply_line
-            call ConvRStr16
+            ld hl,ftp_control_byte
+            ld (ftp_reply_byte+1),hl
+            call ftp_read_reply
             push hl
             ld hl,ftp_reply_line
             call print_ftp_message
             pop hl
-            ld de,0                 ; dalsi radek zustava ulozen pro dalsi volani
+            ld de,0
             ret
 ;77) turn off passive recieve mode
 ; --- DOKUMENTACE CZ: passive_receive_off ---
@@ -8812,7 +8774,6 @@ passive_receive_switch
 ; --- KONEC DOKUMENTACE CZ ---
 print_working_directory
 ;;;koko		
-		call	clear_rece_buf
 		xor	a		;;;koko
 ;		and	a
 		ld	hl,ftp_pwd
@@ -9764,6 +9725,7 @@ buffers_len	equ $-RX_buf
 
 	include "ftp_directory_io.asm"
 	include "ftp_upload_legacy.asm"
+	include "wifi_protocol.asm"
 
 bios_start
 		INCBIN "WifiBios20_MB_EL.cod"
