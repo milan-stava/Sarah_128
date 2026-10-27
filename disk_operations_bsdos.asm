@@ -148,8 +148,8 @@ load_init	ld bc,(fnum)	;find out, if the file exist
 		ld (lf1+1),hl
 		ret
 
-load_file	ld hl,(fnum)
-		ld ix,ftp_dir_start
+load_file	ld ix,ftp_dir_start
+		ld hl,(fnum)
 		ld bc,(beg_sec)
 		ld a,(sec_num)
 		ld e,a

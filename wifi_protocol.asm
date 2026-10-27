@@ -548,8 +548,6 @@ at_result_table
         db AT_BUSY
         dw at_busy_p
         db AT_BUSY
-        dw at_unlink_error
-        db AT_ERROR
         dw 0
 at_ok_text db "OK",0
 at_error_text db "ERROR",0

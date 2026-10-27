@@ -568,13 +568,21 @@ start_ldir	di
 		ld	hl,error_handler_loop	;HL= address, where error handler jumps after an error occurs
 		push	hl
 
-code_		call	bios			;BIOS already in place (bios == bios_start)
+	IFDEF bs_dos
+		ld	a,program_page
+		call	PAGE128
+		call	load_cfg		;nahraj soubor CFG a prevezmi z nej Default 1 profil
+		xor	a
+		call	PAGE128			;pripni stranu 0 a pokracuj
+	ENDIF
 
 	IFDEF hgfx64x24
 	include	"hgfx.asm"
 	include "regs_hgfx.asm"
 hgfx_continue	call	fDMA.Init
 	endif
+
+code_		call	bios			;BIOS already in place (bios == bios_start)
 
 ;hgfx_continue
 		ld	ix,flag1
@@ -632,7 +640,7 @@ s_ldir		ld	(wifi_type),a
 						
 
 st1
-main		bit	0,(ix+3)
+main	bit	0,(ix+3)
 		ld	hl,send_string+1
 		ld	a,18			;jr ss5= do not print what you send to module
 		jr	z,printyesno1		;Z=do not print
@@ -3402,11 +3410,7 @@ dr_dir_full_no_second_zero
 		jr	dr_end
 
 dr_end      call    set_3_5mhz
-            ld      hl,at_cipclose1
-            call    send_string
-            jp      nz,cr_err
-            ; Pockat i na ERROR (kanal uz zavrel server), ne na okamzite ticho.
-            call    ftp_wait_terminal
+            call    ftp_close_data
 		call	passive_receive_off
 		push	iy
 		pop	hl
@@ -9409,6 +9413,8 @@ var_user	db "sarah",0			;variable user-user can change
 var_pasw	db "zxftpc",0			;variable password-user can change
 		ds 31				;reserve
 
+cfg_name	db "sara.cfg  "		;configuration file name
+
 current_host	ds 64				;current host we are logged in
 current_login	ds 3				;contains either "X" or "OK", both followed by 0
 
@@ -9511,7 +9517,7 @@ full		db "full",0
 abbr		db "abbr",0
 first_item	db 3,0,0,"..",3,0,0,0
 fi_len		equ $-first_item
-ftp_port	db "21",0
+ftp_port	db "21",0,0,0,0
 tcp		db 34,"TCP",34,#2C,34,0	;délka 7 bajtù
 speed		db "Speed:",0
 module_no_aswer	db "..speed aligned, but no answer from module..",0
@@ -9803,15 +9809,16 @@ program_page	equ	6		;zde budou PRINT, INPUT......
 
 ;total_len	equ $-code_
 total_len	equ $-start_ldir
-
-
-
-
-
-
-
-
-
-
-
-
+        IFDEF bs_dos
+        SLOT 3
+        PAGE program_page
+        ORG #C000
+program_page_start:
+        INCLUDE "2nd_program_bank.asm"
+program_page_end:
+program_page_len equ program_page_end-program_page_start
+        PAGE 0
+        ELSE
+program_page_start equ #C000
+program_page_len equ 0
+        ENDIF

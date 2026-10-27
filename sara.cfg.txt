@@ -1,0 +1,51 @@
+;Sarah FTP client configuration file 1.0
+;***************************************
+
+;Usage: create yourself any number of your preffered FTP profiles, the format of one profile looks like this:
+
+;Default=0			;1= the profile will be set as default upon Sarah start,
+				;0= the opposite.
+				;If no Default=1 found, Sarah keeps its built-in values;
+				;if more defaults=1 found, first one will be selected.
+;Name=Sarah FTP server		;your prefered name of the profile (eg. my home computer,
+				;my external FTP server, etc…)
+;Host=sarah.speccy.cz		;host name in the form of URL (eg. sarah.speccy.cz) or IP address (eg. 192.168.0.104)
+;Port=21			;leave 21 for standart ftp servers.
+				;Mobile ftp servers can have eg. 2121
+;User=sarah			;user name
+;Pass=zxftpc			;optional: password
+;File=				;optional: your preffered file you want to download automatically pressing SS+D
+;Start=				;optional: your preffered start address in decimal
+
+;IMPORTANT: leave the format of profile as it is, do not change order of items!
+
+;profile 1
+Default=0
+Name=Sarah FTP server
+Host=sarah.speccy.cz
+Port=21
+User=sarah
+Pass=zxftpc
+File=
+Start=
+
+
+;profile 2
+Default=0
+Name=Home Lenovo
+Host=192.168.0.105
+Port=21
+User=hood
+Pass=
+File=SARAH12BSD
+Start=24576
+
+;profile 3
+Default=1
+Name=my mobile phone
+Host=192.168.0.100
+Port=2121
+User=hood
+Pass=
+File=
+Start=

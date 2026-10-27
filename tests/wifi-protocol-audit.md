@@ -41,6 +41,7 @@ node tests/startup_resume.test.js
 node tests/directory_checksum.test.js
 node tests/download_return.test.js
 node tests/download_protocol.test.js
+node tests/directory_cleanup.test.js
 ```
 
 Tests execute the assembled Z80 code with simulated UART input. They cover
@@ -130,3 +131,25 @@ Real tests should include B during a large download, B near completion, repeated
 downloads and a fresh LIST/NOOP after abort, in addition to normal navigation.
 Capture raw UART with timestamps in both directions when possible, alongside
 the FileZilla Server command/reply log, to correlate failures across both links.
+
+## Hardware-reported error 39 after LIST (after checkpoint 22305ba)
+
+The user reports that directory data reaches RAM but cleanup raises error 39.
+The FileZilla Server log shows LIST, 150 and 226; no UART trace was available.
+The regression executing the actual dr_end and passive_receive_switch reproduces
+error 39 with `UNLINK\r\nERROR\r\n`: the parser incorrectly treated bare UNLINK
+as a terminal. The close returned too early; ERROR was attributed to the next
+CIPRECVMODE command, leaving that command's real OK unread. UNLINK followed by
+OK also left a stale terminal.
+
+Bare UNLINK is now a notice; combined `UNLINK   ERROR` remains an error terminal.
+LIST cleanup and download abort share ftp_close_data, which drains the actual
+terminal, rejects busy/SEND FAIL at the close (43), and verifies an empty data
+channel before tolerating ERROR for an already closed socket. No new error code.
+
+349 new assertions exercise whole LIST cleanup with fragmented close responses,
+standalone/combined UNLINK, ordinary ERROR, busy, SEND FAIL and unread data.
+All 1,979 assertions in ten suites pass; BSDOS builds without errors/warnings.
+The fix saves 9 bytes against 22305ba: total growth from 5c865b3 is 1,398 bytes;
+6,720 bytes remain before #BFE0. New raw binary copied to D:\zx\SARAH12BSD.bin.
+Hardware retest is required; the actual modem response sequence is unconfirmed.

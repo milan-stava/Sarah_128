@@ -11,7 +11,7 @@ function makeCpu(code, bios, S, options={}) {
  const cp=v=>{z=a===v;cf=a<v;}, logic=()=>{z=a===0;cf=false;};
  function status(){polls++;if(options.onPoll)options.onPoll(polls,rx);if(rx[0]===null)rx.shift(); const busy=(txBusy>0||sent.length>=options.txStuckAt)?2:0;if(txBusy>0)txBusy--;lastStatus=(rx.length&&rx[0]!=null?1:0)|busy|(options.statusBits||0);return lastStatus;}
  function step(){
- if(options.hook){const result=options.hook(pc,{m,a,z,carry:cf,hl:hl(),de:de(),bc:bc(),ix,iy,stack});if(result){if(result.a!=null)a=result.a;if(result.z!=null)z=result.z;if(result.carry!=null)cf=result.carry;if(result.hl!=null){h=result.hl>>8;l=result.hl&255;}if(result.de!=null){d=result.de>>8;e=result.de&255;}if(result.bc!=null){b=result.bc>>8;c=result.bc&255;}if(result.ret){pc=stack.pop();return;}}}
+ if(options.hook){const result=options.hook(pc,{m,a,z,carry:cf,hl:hl(),de:de(),bc:bc(),ix,iy,stack});if(result){if(result.a!=null)a=result.a;if(result.z!=null)z=result.z;if(result.carry!=null)cf=result.carry;if(result.hl!=null){h=result.hl>>8;l=result.hl&255;}if(result.de!=null){d=result.de>>8;e=result.de&255;}if(result.bc!=null){b=result.bc>>8;c=result.bc&255;}if(result.ix!=null)ix=result.ix;if(result.iy!=null)iy=result.iy;if(result.ret){pc=stack.pop();return;}}}
  if(pc===S.upl_tx_pace_loop)paceIterations++;
  const at=pc,op=m[pc++];
  switch(op){
@@ -71,7 +71,7 @@ function makeCpu(code, bios, S, options={}) {
  case 0x0f:cf=!!(a&1);a=(a>>1)|(cf?128:0);break;
  case 0x1f:{const old=cf;cf=!!(a&1);a=(a>>1)|(old?128:0);break;}
  case 0xcb:{const op2=m[pc++];if(op2===0x79)z=!(c&128);else if(op2===0x47)z=!(a&1);else if(op2>=0x40&&op2<=0x7f)z=!(get(op2&7)&(1<<((op2>>3)&7)));else if(op2>=0x80){const mask=1<<((op2>>3)&7);put(op2&7,op2>=0xc0?get(op2&7)|mask:get(op2&7)&~mask);}else throw Error("CB "+op2);break;}
- case 0xdd:{const op2=m[pc++];if(op2===0x21){ix=word();break;}const disp=m[pc++];const addr=(ix+(disp<128?disp:disp-256))&65535;if(op2===0x7e){a=m[addr];break;}if(op2===0x77){m[addr]=a;break;}if(op2===0x36){m[addr]=m[pc++];break;}if(op2===0x34||op2===0x35){m[addr]=(m[addr]+(op2===0x34?1:-1))&255;z=m[addr]===0;break;}if(op2===0xbe){cp(m[addr]);break;}if(op2!==0xcb)throw Error('DD '+op2);const bitop=m[pc++],mask=1<<((bitop>>3)&7);if(bitop<0x80){z=!(m[addr]&mask);}else if(bitop<0xc0){m[addr]&=255^mask;}else{m[addr]|=mask;}break;}
+ case 0xdd:{const op2=m[pc++];if(op2===0x21){ix=word();break;}if(op2===0xe5){stack.push(ix);break;}if(op2===0xe1){ix=stack.pop();break;}if(op2===0x19){const n=ix+de();cf=n>65535;ix=n&65535;break;}const disp=m[pc++];const addr=(ix+(disp<128?disp:disp-256))&65535;if([0x46,0x4e,0x56,0x5e,0x66,0x6e,0x7e].includes(op2)){put((op2>>3)&7,m[addr]);break;}if(op2===0x77){m[addr]=a;break;}if(op2===0x36){m[addr]=m[pc++];break;}if(op2===0x34||op2===0x35){m[addr]=(m[addr]+(op2===0x34?1:-1))&255;z=m[addr]===0;break;}if(op2===0xbe){cp(m[addr]);break;}if(op2!==0xcb)throw Error('DD '+op2);const bitop=m[pc++],mask=1<<((bitop>>3)&7);if(bitop<0x80){z=!(m[addr]&mask);}else if(bitop<0xc0){m[addr]&=255^mask;}else{m[addr]|=mask;}break;}
  case 0xed:{
  const o=m[pc++];const port=bc();
  if(o===0x73){const addr=word(),sp=0xf000-2*stack.length;m[addr]=sp&255;m[addr+1]=sp>>8;}
@@ -105,7 +105,7 @@ function makeCpu(code, bios, S, options={}) {
   stack=[65535];pc=entry;let startSteps=steps;
   while(pc!==65535){if(++steps-startSteps>300000000)throw Error("step limit");step();}
   if(stack.length)throw Error("Stack imbalance");
-  return {a,z,carry:cf,bc:bc(),de:de(),hl:hl(),iy,polls,rxReads};
+  return {a,z,carry:cf,bc:bc(),de:de(),hl:hl(),ix,iy,polls,rxReads};
  }};
 }
 

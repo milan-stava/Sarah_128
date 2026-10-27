@@ -122,17 +122,23 @@ ftp_abort_download
 .barrier ld a,c
         cp 3
         jr nz,.error              ;require final 225/226 and our NOOP marker
+        call ftp_close_data
+        call passive_receive_off
+        jp ful_abort_done         ;existing display/refresh and stack unwinding
+
+; Close channel 1 and consume its actual terminal, not a preceding UNLINK notice.
+; A rejected close is harmless only when no data remains. Never ignore busy.
+ftp_close_data
         ld hl,at_cipclose1
         call at_send_ok
-        jr nc,.closed
+        ret nc
         cp AT_ERROR
         jr nz,.close_error        ;busy/SEND FAIL cannot mean already closed
         call ftp_query_lengths
         ld a,h
         or l
         jr nz,.close_error        ;ERROR is tolerable only with no pending data
-.closed call passive_receive_off
-        jp ful_abort_done         ;existing display/refresh and stack unwinding
+        ret
 .close_error ld c,43
         jp error_handler
 

@@ -1,13 +1,76 @@
 # Predtestovy checkpoint Wi-Fi — 22. 10. 2026
 
+## Aktualni checkpoint CFG — 27. 10. 2026
+
+BS-DOS verze umi nacist soubor sara.cfg a prevzit z nej vychozi profil
+s Default=1. Zdroj druhe programove banky je 2nd_program_bank.asm;
+banka je nyni fyzicky RAM 6 a pozdeji bude obsahovat i dalsi rutiny.
+Uzivatel overil aktualni sestaveni v emulatoru a potvrdil funkcnost CFG.
+Posledni BSDOS preklad: 0 chyb, 0 varovani. SARA_LOADER.tap obsahuje BASIC,
+SARA1 (#6000, 24 576 B) a SARA2 (#C000 v bance 6, 444 B).
+Uspora proti predchozi 525B verzi je 81 B.
+
+Nove low-level komunikacni rutiny Wi-Fi (AT/FTP, cekani a prijem odpovedi)
+STALE NEJSOU OVERENE NA REALNEM HARDWARU. Emulatorovy test CFG nenahrazuje
+realny test Wi-Fi. Ten zustava naplanovan s UART zaznamem a logem FileZilly.
+Upload zustava znamy nefunkcni/odlozeny problem.
+
+Aktualni zkraceny CFG loader je rucni uprava uzivatele, pouziva load_init
+a load_file+4. Predchozich 709 CFG kontrol overovalo drivejsi 525B loader;
+testy loaderu vyzaduji prizpusobeni soucasne variante. Detaily a omezeni
+viz tests/cfg-audit.md. Zmeny kodu pri tomto commitovani nebyly provadeny.
+
+Nasledujici oddil popisuje historickou 525B variantu pred rucnim zkracenim.
+
+## CFG v bance 6 — 27. 10. 2026
+
+load_cfg a parser jsou opravene v 2nd_program_bank.asm. Start mapuje banku 6,
+nacte sara.cfg, overi cely vybrany Default=1 profil a prevezme hodnoty,
+pak vrati banku 0. Chybny/chybejici CFG ponecha nastaveni; IX/IY zustavaji
+zachovane. Overena skutecna 32bitova delka tela, meze banky a navraty DOSu.
+Pouzit kompletni SARA_LOADER.tap s BASICem, SARA1 a SARA2. Samotny stary
+hlavni blok banku 6 neobsahuje. program_page_len je nyni 525 B, po optimalizaci
+z 581 B (uspora 56 B). CFG muze mit nejvyse 15 858 B. Volno do #BFE0 6 695 B.
+Ukazka sara.cfg.txt; 709 CFG kontrol proslo, take 1 979 dosavadnich regresnich kontrol.
+Podrobnosti a meze overeni viz tests/cfg-audit.md.
+BS-DOS sestaveni bez chyb/varovani, ESXDOS kontrolni preklad bez CFG take.
+Realne nacteni z disku a strankovani zatim cekaji na test.
+
+Nize je historicky mezistav pripravy TAP a Wi-Fi checkpointu.
+
+## Priprava CFG a dvoublokove TAP — 25. 10. 2026
+
+Realne testovani Wi-Fi je na pokyn uzivatele odlozene. Novy BASIC loader je
+v sara_loader.asm / SARA_LOADER.tap a automaticky startuje na radku 10.
+BSDOS sestaveni doplni do SARA_LOADER.tap za BASIC bloky SARA1 (#6000, #6000
+bajtu, tedy #6000..#BFFF) a SARA2 (banka 6, #C000, program_page_len bajtu).
+Zdroj baleni je sara_tap.asm. program_page_len je zatim EQU 0, protoze data
+banky 6/CFG jeste nejsou definovana; pro tuto hodnotu se obnovi pouze BASIC
+loader a assembler vypise, ze CODE bloky cekaji na skutecny obsah. Po doplneni
+banky nastavit delku podle skutecneho konce dat. Uplna TAP vyzaduje 1..16384 B.
+Puvodni BSDOS raw obraz i jednosouborova SARAH12BSD.tap zustavaji dostupne.
+Baleni overeno testovacimi daty odlisnymi v bance 0 a 6, delky 4 a 16384 B,
+hlavickami, kontrolnimi soucty a odmitnutim delky 0/16385. Spustitelny obraz
+Sary se touto pripravou nezmenil. ESXDOS zustava odlozeny.
+
+## Dosavadni stav oprav Wi-Fi
+
 Aktualizace po checkpointu `5c865b3`: uzivatel povolil opravy sdileneho Wi-Fi
 protokolu. Sdileny parser a nasledne opravy inicializace jsou implementovane;
 podrobnosti a meze jsou v `tests/wifi-protocol-audit.md`. BSDOS sestaveni bez
-chyb/varovani, 1 630 automatickych kontrol proslo. Proti checkpointu +1 407 B,
-volno do #BFE0 6 711 B. Etapa inicializace pridala 195 B; nasledne odstraneni
+chyb/varovani, 1 979 automatickych kontrol proslo. Proti checkpointu +1 398 B,
+volno do #BFE0 6 720 B. Etapa inicializace pridala 195 B; nasledne odstraneni
 dvou volani prazdneho print_bauds a jeho RET usetrilo 7 B. Dokonceni/preruseni
 downloadu bylo prevedeno na spolecny parser (+160 B).
 Tento predtestovy checkpoint uchovava zmeny pred overenim na skutecnem stroji.
+
+Po checkpointu 22305ba uzivatel na stroji nacetl adresar, ale nasledovala chyba
+39. Simulace celeho dr_end presne reprodukovala chybu pri UNLINK + ERROR:
+parser vracel chybu uz na UNLINK a priradil zbyvajici ERROR prepnuti rezimu.
+Oprava rozlisuje oznameni UNLINK od skutecneho terminalu a sdili kontrolovane
+zavreni datoveho kanalu s abortem downloadu. Oprava usetrila 9 B a zatim neni
+commitnuta ani overena na stroji. FTP log potvrzuje LIST/226; UART sled zatim
+neni zachycen, proto skutecnou posloupnost odpovedi modulu jeste overit.
 Upload zustava nefunkcni a jeho telo/legacy parser nebyly prepsany.
 Nize je historicky zaznam checkpointu; puvodni pozastaveni Wi-Fi auditu uz
 neplati. Inicializace rychlosti byla proverena a opravena; vyber/pripojeni AP
