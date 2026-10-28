@@ -792,20 +792,33 @@ ASECND1  pop  af
 
 
 
-;rutina INPUT v MBC vklada znaky z klavesnice
-;OUT C=pozice kurzoru. 0= nic vlozeno
-INPUT    ld   hl,INPBUFF
-         ld   b,63
-IN1      ld   (hl),32
+; INPUT starts empty; INPUT_VALUE takes a zero-terminated value in DE.
+; IXH=maximum length (1..63). Fixed end marker bounds insert/delete shifts.
+; Copy first, then pad: DE may point to INPBUFF itself (rename).
+INPUT    ld   de,input_empty
+INPUT_VALUE:
+         ld   hl,INPBUFF
+         ld   b,ixh
+         ld   c,0
+.copy    ld   a,(de)
+         or   a
+         jr   z,.pad
+         call INPUT_MASK
+         ld   (hl),a
          inc  hl
-         djnz IN1
-         
-;         ld   hl,12*256+15	;zbytecne, odstranil jsem v ftp klientovi 0.97
-;        ld   a,32
-;         call CHAR
-         
-         xor  a
-;         ld   (hl),a		;ver27, pryc, prepisuje to pamet a neni to asi potreba
+         inc  de
+         inc  c
+         djnz .copy
+.pad     ld   a,c
+         cpl
+         ld   b,a
+.spaces  ld   (hl),32
+         inc  hl
+         djnz .spaces
+         ld   (hl),0                  ; INPBUFF+255, for shared length scans
+         ld   hl,INPBUFF+63
+         ld   (hl),0                  ; editor shifts must stop here
+         ld   a,c
 INPUT2   ld   (CURSOR+1),a
 ;         ld   hl,12*256+16	;puvodni z MBC
          ld   hl,txt_adr_edit_zone2
@@ -898,6 +911,10 @@ INQQQ    call KEYSCAN
 ;         ld   a,(hl)
 ;         or   a
 ;         jr   z,INQQQ
+         cp   1                       ; BREAK; legacy code 4 also cancels (not EDIT/CS+1)
+         jr   nz,IN_CHECK_END
+         ld   a,4
+IN_CHECK_END:
          cp   4
 ;         ret  z
 		jr	z,IN_END 
@@ -922,12 +939,16 @@ INQQQ    call KEYSCAN
          cp   128
          ret  nc
 
-;INX_HS		set	7,a		;hlavni rutina to tu modifikuje set 7,a= bude se tisknout "X"
-INX_HS	db	#CB			;bajty #CB+nop= instrukce RLC B... bude tisknout ASCII
-	nop
+         call INPUT_MASK
 
 
 IN6         ex   af,af'
+         push hl
+         call input_l_count
+         ld   a,c
+         pop  hl
+         cp   ixh
+         ret  nc                      ; a full value must not lose its last character
          ld   a,(hl)
          cp   ixh
          ret  nc
@@ -1008,6 +1029,12 @@ IN_END1		res	7,(hl)
 		ld	hl,CURSOR+1
 		ld	c,(hl)			;C=pozice kurzoru
 		ret
+
+; Same mask for prefilled and newly typed characters; original value untouched.
+INPUT_MASK:
+INX_HS   or   0                       ; operand 0=plain, #80=masked
+         ret
+input_empty: db 0
 	
 
 	include "inkey.a80"	;ver26, premistujeme na #BF01

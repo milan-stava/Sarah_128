@@ -1,5 +1,38 @@
 # Predtestovy checkpoint Wi-Fi — 22. 10. 2026
 
+## Aktualni INPUT: predvyplneni hodnot a prazdne heslo
+
+Proti commitu 4603dbd hlavni kod narostl o 143 B. bios_start #A44E,
+bios_len 544 B, volno pred #BFE0 nyni 6514 B. Banka 6 stale 1066 B,
+CFG limit 15317 B. TAP stale 25841 B (SARA1 ma pevnou velikost 24576 B).
+
+Spolecny editor nabizi aktualni server, uzivatele, heslo, nazev souboru,
+desetinnou pocatecni adresu a pri RNTO soucasny nazev polozky. Kurzor zacina
+na konci, SS+Q skutecne vycisti radek. Novy adresar, vlastni FTP prikaz
+a hledany vyraz nemaji ulozenou vychozi hodnotu a zacinaji prazdne.
+Editor ma 63 textovych sloupcu a jeden pro kurzor, limity poli respektuji
+CFG (host 45, user/pass 31, file 56, start 5; upload lokalni jmeno 10/12).
+ENTER potvrzuje obsah nezavisle na poloze kurzoru. BREAK (CS+SPACE) rusi vstup;
+zachovano je take stare ruseni kodem 4 (CS+3), nikoli standardni EDIT (CS+1).
+
+Prazdne heslo potvrzene ENTER se ulozi/odesle jako prazdne; zruseni ponecha
+puvodni hodnotu. Maskovani plati pro puvodni i nove znaky a po navratu se
+vypne. Automaticky login pripravuje USER a PASS oddelene, vcetne prazdneho
+hesla; nehrozi LDIR s BC=0 ani zbytek uzivatelskeho jmena za kratsim heslem.
+Posuny jsou ohranicene uvnitr INPBUFF; plne pole pri vlozeni neztraci konec.
+
+BSDOS, HGFX a ESXDOS prelozeny bez chyb/varovani. Nova sada input_editor
+prosla: 341 kontrol BSDOS, 329 HGFX, 341 ESXDOS. Spolecne s predchozimi
+regresemi 13344 kontrol hlavni BSDOS sestavy. Testy vykonavaji skutecny
+editor, maskovani, editaci, mazani, settery, prevod adresy a sestaveni
+USER/PASS vcetne celeho automatickeho/manualniho loginu se simulovanou siti.
+Ve dvou ZX pripadech bezi i skutecny CHAR; HGFX VRAM a realne Wi-Fi casovani
+se netestuji. Uzivatel 28. 10. 2026 potvrdil funkcnost noveho INPUT v emulatoru.
+STALE JE POTREBA OVERENI NA REALNEM STROJI, vcetne Wi-Fi/FTP a prazdneho hesla.
+Podrobnosti v tests/input-editor-audit.md.
+
+Nize jsou historicke checkpointy pred upravou INPUT.
+
 ## Aktualni vyber profilu: posun po jednom radku
 
 Sipky uvnitr okna meni pouze sdileny kurzor a hodnoty vybraneho profilu.

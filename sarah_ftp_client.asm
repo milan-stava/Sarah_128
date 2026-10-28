@@ -1187,9 +1187,10 @@ save_app	ld	hl,zxftpcl
 change_host	ld	de,enter_url
 		call	print_ez1
 
-		call	input_line
-		jp	z,clear_ini_keyl	;Z=abort pressed during input, carry out clear_edit_line+jp to key_loop
 		ld	de,host_url
+        ld      c,45
+		call	input_line_edit_limit
+		jp	z,clear_ini_keyl	;Z=abort pressed during input, carry out clear_edit_line+jp to key_loop
 		ldir
 		xor	a
 		ld	(de),a
@@ -1207,7 +1208,13 @@ ftp_upload_file
 
 		call	clear_exp_name		;clear file name
 
-		call	input_line
+        ld      de,var_name
+        IFDEF bs_dos
+        ld      c,10
+        ELSE
+        ld      c,12
+        ENDIF
+		call	input_line_edit_limit
 ;		ret	z			;Z=abort pressed during input
 		jp	z,clear_ini_keyl	;Z=abort pressed during input, carry out clear_edit_line+jp to key_loop
 		ld	de,exp_name
@@ -2134,6 +2141,8 @@ rename_item_file
 
 		ld	de,INPBUFF
 		call	DIR128_COPY_NAME_TO_DE
+		xor	a
+		ld	(de),a
 		ld	hl,ftp_rnfr
 
 		ld	a,1
@@ -2191,6 +2200,15 @@ ffc1		ld	hl,exp_name
 
 		call	input_l_count
 		pop	de
+        IFDEF bs_dos
+        ld      a,10
+        ELSE
+        ld      a,12
+        ENDIF
+        cp      c
+        jr      nc,ffc1_copy
+        ld      c,a                   ; local disk-name buffer is shorter than FTP names
+ffc1_copy:
 ;		ld	b,0
 		ldir
 		xor	a			;A=0, for return to key_loop
@@ -2346,14 +2364,8 @@ auto_login	call	get_status_ftp		;find out if already connected to ftp server
 
 al1		call	connect_to_ftp_server	;connect to new server
 
-al_user_pass	call	clear_inp_buf
-		ld	hl,var_user
-		push	hl
-		call	count_com_len
-		ld	de,INPBUFF
-		pop	hl
-		push	de			;DE=INPBUFF
-		ldir
+al_user_pass	ld	hl,var_user
+        call    prepare_ftp_value
 
 		ld	a,1			;enter username
 		ld	de,331
@@ -2362,11 +2374,7 @@ al_user_pass	call	clear_inp_buf
 		jp	c,error_handler
 
 		ld	hl,var_pasw
-		push	hl
-		call	count_com_len
-		pop	hl
-		pop	de			;DE=INPBUF
-		ldir
+        call    prepare_ftp_value
 
 		ld	a,1			;enter password
 		ld	de,230
@@ -5290,9 +5298,8 @@ set_filename	ld	de,enter_fil_nam	;set new default file name
 		call	print_ez1
 
 		ld	de,var_name
-		push	de
-		call	input_line
-		pop	de
+        ld      c,56
+		call	input_line_edit_limit
 ;		ret	z			;Z=abort pressed during input
 		jp	z,clear_ini_keyl	;Z=abort pressed during input, carry out clear_edit_line+jp to key_loop
 		ldir
@@ -5308,7 +5315,15 @@ set_filename	ld	de,enter_fil_nam	;set new default file name
 ; --- KONEC DOKUMENTACE CZ ---
 set_start	ld	de,enter_start_add	;set new default file name
 		call	print_ez1
-		call	input_line
+        ld      hl,(var_start)
+        ld      de,block_asci
+        push    de
+        call    HL2ASCII
+        ld      a,h
+        ld      (de),a
+        pop     de
+        ld      c,5
+		call	input_line_edit_limit
 ;		ret	z			;Z=abort pressed during input
 		jp	z,clear_ini_keyl	;Z=abort pressed during input, carry out clear_edit_line+jp to key_loop
 		ex	de,hl
@@ -5357,16 +5372,18 @@ set_user	ld	de,enter_usr
 		call	print_ez1
 
 		ld	de,var_user
-su1		push	de
-		call	input_line
-		pop	de
-		ld	a,b			;B=0
-		ld	(INX_HS+1),a		;vrat NOOP, puvodni hodnota, vypisuje ASCII, ne "XXXX"
+        ld      c,31
+		call	input_line_edit_limit
+su1:
 ;		ret	z			;Z=abort pressed during input
 		jp	z,clear_ini_keyl	;Z=abort pressed during input, carry out clear_edit_line+jp to key_loop
+        ld      a,c
+        or      a
+        jr      z,su_empty             ; empty password is valid, no LDIR BC=0
 		ldir
-		ex	de,hl
-		ld	(hl),0
+su_empty:
+        xor     a
+        ld      (de),a
 		jr	prn_host_usr_psw
 
 ; --- DOKUMENTACE CZ: set_pass ---
@@ -5379,11 +5396,7 @@ su1		push	de
 set_pass	ld	de,psw
 		call	print_ez1
 		ld	de,var_pasw
-		xor	a			;vkladame nop do rutiny INPUT
-		bit	2,(ix+0)		;test if pasword is protected
-		jr	z,set_pass1
-		dec	a			;vkladame #FF
-set_pass1	ld	(INX_HS+1),a
+        call    input_password
 		jr	su1
 
 ; --- DOKUMENTACE CZ: set_hide_pass ---
@@ -7240,16 +7253,22 @@ sfc4		ld	a,(hl)
 		jr	z,sfc2		;Z=command+ prepared text
 
 		push	de		;NC=command+ new input parameter (string)
-		call	input_line
+		call	input_ftp_parameter
 		jr	nz,sfc3
 		jp	z,clear_ini_keyl	;Z=abort pressed during input, carry out clear_edit_line+jp to key_loop
 ;		jp	initsp_keyloop	;Z=input aborted, init SP+ jp key_loop
 
 sfc3		pop	de
+        ld      a,c
+        or      a
+        jr      z,sfc1                ; confirmed empty PASS
 		ldir
 		jr	sfc1
 
 sfc2		call	input_l_count
+        ld      a,c
+        or      a
+        jr      z,sfc1                ; automatic empty PASS
 		ldir
 
 sfc1		ld	hl,eol
@@ -7816,31 +7835,84 @@ epm4		ld	c,9
 ;inputs character. OUT=C=length of input string, HL= start of string=INPBUFF
 ;OUT=NZ=data inputed, Z=abort pressed, A=4
 ; --- DOKUMENTACE CZ: input_line ---
-; Ucel: Načte uživatelský řádek s limitem editoru 64 znaků.
+; Ucel: Načte uživatelský řádek, nejvýše 63 znaků plus místo pro kurzor.
 ; Vstup: Bez registrů parametrů; využívá INPUT a INPBUFF.
 ; Vystup: NZ = neprázdný vstup, HL=INPBUFF, BC=délka bez koncových mezer; Z = zrušeno nebo
 ;   prázdný vstup.
 ; Meni: AF, BC, HL a registry dle INPUT; IX je explicitně zachován.
 ; --- KONEC DOKUMENTACE CZ ---
-input_line	push	ix
-		ld	ixh,64
-		call	INPUT
+; DE=initial value; optional C=field limit. The source and IX are preserved.
+; Editor has 63 text columns plus one cursor column. Z=cancel/empty normally.
+input_line      ld      de,input_empty
+input_line_edit ld      c,63
+input_line_edit_limit:
+        push    de
+        push    ix
+        ld      ixh,c
+		call	INPUT_VALUE
 		pop	ix
+        pop     de
 
 		cp	4
 ;		ld	c,a
 		ret	z
-		dec	c
-		inc	c
-		ret	z			;Z=cursor was 0
-;		jp	z,error_handler
+        ; Count contents, not cursor position: ENTER at column zero is valid.
+        jr      input_l_count
+
+; DE=password value. ENTER accepts even an empty string; Z only on cancel.
+input_password:
+        xor     a
+        bit     2,(ix+0)
+        jr      z,.mask
+        ld      a,#80
+.mask:  ld      (INX_HS+1),a
+        ld      c,31
+        call    input_line_edit_limit
+        cp      4
+        ld      a,b                   ; B=0, preserve cancellation flags
+        ld      (INX_HS+1),a
+        ret
+
+; A=2 in send_ftp_command: choose a current value by the command being built.
+; MKD starts empty; RNTO edits the name already prepared in INPBUFF.
+input_ftp_parameter:
+        ld      a,(TX_buf)
+        ld      de,var_name
+        ld      c,56
+        cp      "S"                   ; SIZE
+        jr      z,input_line_edit_limit
+        ld      de,var_user
+        ld      c,31
+        cp      "U"                   ; USER
+        jr      z,input_line_edit_limit
+        ld      de,var_pasw
+        cp      "P"                   ; PASS
+        jr      z,input_password
+        ld      de,INPBUFF
+        cp      "R"                   ; RNTO
+        jr      z,input_line_edit
+        jr      input_line
+
+; HL=zero-terminated automatic USER/PASS. Handles empty values without LDIR.
+prepare_ftp_value:
+        push    hl
+        call    clear_inp_buf
+        pop     hl
+        ld      de,INPBUFF
+.copy:  ld      a,(hl)
+        ld      (de),a
+        inc     hl
+        inc     de
+        or      a
+        jr      nz,.copy
+        ret
 
 ; --- DOKUMENTACE CZ: input_l_count ---
 ; Ucel: Určí délku INPBUFF po odstranění koncových mezer a nul.
 ; Vstup: INPBUFF = připravený text v 255bajtovém poli.
 ; Vystup: HL=INPBUFF, B=0, C=délka.
 ; Meni: AF, BC, HL; případný vstup přes input_line má jeho vedlejší účinky.
-; Poznamka: Skenuje odzadu; předpokládá, že narazí na neprázdný znak.
+; Poznamka: Skenuje odzadu nejvýše 255 bajtů; prázdný řádek vrací BC=0 a Z.
 ; --- KONEC DOKUMENTACE CZ ---
 input_l_count	ld	hl,INPBUFF+254		;username
 		ld	bc,255		
@@ -7852,11 +7924,10 @@ il1		ld	a,(hl)
 		jr	nz,il2
 il3		dec	c
 		dec	hl
-		jr	il1
+        jr      nz,il1                 ; bounded even when the whole line is empty
 il2		ld	hl,INPBUFF
 		dec	c
 		inc	c
-		jr	z,input_line	;empty line inserted, try again
 		ret
 
 ; --- DOKUMENTACE CZ: clear_inp_buf ---
@@ -7864,13 +7935,14 @@ il2		ld	hl,INPBUFF
 ; Vstup: Bez parametrů.
 ; Vystup: HL=INPBUFF+255, B=0.
 ; Meni: B, HL; AF, C, DE, IX a IY zachovány.
-; Poznamka: Nezapisuje nulový terminátor.
+; Poznamka: Na INPBUFF+255 zapisuje nulový terminátor.
 ; --- KONEC DOKUMENTACE CZ ---
 clear_inp_buf	ld   hl,INPBUFF
 	        ld   b,255
 cib		ld   (hl),32
         	inc  hl
 	        djnz cib
+        ld      (hl),0                ; explicit end marker inside 256-byte buffer
 		ret
 
 
