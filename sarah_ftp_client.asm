@@ -727,6 +727,10 @@ kl_alogin	bit	1,(ix+0)		;carry out autologin? ;bit 1=login to server,0=automatic
 
 
 key_loop	call	KEYSCAN
+	IFDEF bs_dos
+        cp      "g"
+        call    z,cfg_choose_profile
+	ENDIF
 		cp	"u"
 		call	z,ftp_upload_file
 		cp	"o"
@@ -854,6 +858,25 @@ kl8     call at_next_event
         jp z,error_handler_loop
 kl9		xor	a			;A=0 to return to key_loop
 		jp	key_loop
+
+	IFDEF bs_dos
+; Keep bank switching and directory redraw below #C000: printing an FTP
+; directory can map another bank, so it cannot return into bank-6 code.
+cfg_choose_profile:
+        ld      a,(PAGE128_STATE)
+        push    af
+        ld      a,program_page
+        call    PAGE128
+        call    cfg_browser
+        pop     af
+        call    PAGE128
+        ; cfg_browser returns with IX=flag1.
+        call    clear_edit_zone
+        bit     0,(ix+1)
+        call    nz,dir_move4
+        xor     a
+        ret
+	ENDIF
 
 
 
@@ -5017,6 +5040,9 @@ dc_1:
 	ENDIF
 dc_3:
 		ld	hl,(cursor_w_curad)
+; Shared row drawing, without directory lookup/paging or changing its cursor.
+; HL=row attribute address; normal: A=colour; HGFX: BC=pattern/colour, E=plane.
+draw_cursor_row:
 
 ;kresli kurzor na neoznacene polozce	56	znak=#80 dc_5		barva=#80 dc_8		OK	FUNGUJE na barve #80 je bila
 ;smaz kurzor na neoznacene polozce	7	znak=#20		barva=#80		OK	FUNGUJE na barve #80 je bila
@@ -5404,6 +5430,9 @@ prn_host_usr_psw
 		call	count_com_len
 
 		ld	b,c			;B=length of password
+        ld      a,b
+        or      a
+        jp      z,clear_edit_zone       ;empty password must not print 256 Xs
 		ld	hl,(HLKO+1)
 phup		push	bc
 		ld	a,"X"
@@ -9524,7 +9553,11 @@ module_no_aswer	db "..speed aligned, but no answer from module..",0
 spaces		db "                                ",0
 
 menu_dir	db "I-Fn Spc ZX R-Rr 6-Rn 7-MD Del Br-UD ss+/N",0
+	IFDEF bs_dos
+menu1		db "F-file T-start A-YES H-host E-usr P-pass U-up S-size Q-end G-CFG",0
+	ELSE
 menu1		db "F-file T-start A-YES H-host E-usr ss+/P-pass U-upl S-size Q-quit",0
+	ENDIF
 ;menu1		db "S-size Q-quit F-file T-start A-YES H-host R-user P-pass U-upld",0
 ;menu2		db "W-wifi OFF ss+/L-auto/login O-logoff V-save app ss+/D-dwnld/file",0
 menu2		db "W-wifi OFF Cs/ss+/L-login O-logoff V-savApp Cs/ss+/D-dwnld C-com",0

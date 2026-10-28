@@ -1,5 +1,78 @@
 # Predtestovy checkpoint Wi-Fi — 22. 10. 2026
 
+## Aktualni vyber profilu: posun po jednom radku
+
+Sipky uvnitr okna meni pouze sdileny kurzor a hodnoty vybraneho profilu.
+Na dolnim/hornim okraji se obraz posune o jeden textovy radek a vytiskne
+se pouze novy nazev. Nadpis se kresli jednou pri vstupu, limit je 32 profilu.
+Kopie obrazu respektuje prekryv v obou smerech (LDIR/LDDR); kurzor se pred
+posunem odstrani. ZX i HGFX maji vlastni rozlozeni obrazu v bance 6.
+
+Proti predchozi 962B verzi banka 6 +104 B, nyni 1066 B. Hlavni kod beze zmeny.
+Proti commitu 19f060d celkem +660 B (banka +622, hlavni +38).
+Volno do #BFE0 stale 6657 B, CFG nejvyse 15317 B, SARA_LOADER.tap 25841 B.
+BSDOS, HGFX a ESXDOS preklad bez chyb/varovani. Proslo 13003 kontrol:
+685 CFG, 10195 vyberu/bitmapoveho posunu, 144 navratu ENTER/BREAK a 1979 ostatnich.
+Testy spousteji skutecnou kopii ZX obrazu, kontroluji vsech osm pixelovych
+pruhu, pohyb obema smery, krajni polohy, zmenu smeru i absenci prekreslovani
+nazvu uvnitr okna. HGFX zatim pouze prelozen, overit vzhled v emulatoru.
+Nove low-level Wi-Fi rutiny stale cekaji na realny hardware; upload odlozen.
+
+Kontrola hlaseneho padu po ENTER: v kodu navratu nebyla nalezena chyba.
+Novy cfg_exit.test.js spousti skutecny tisk, obnovu dvoupolozkoveho adresare
+a celou hlavni klavesovou smycku az po dalsi klavesnicovy dotaz, s prazdnym UART.
+ENTER/BREAK overeny s adresarem i bez nej, po rolovani i bez pohybu, vratane
+obnovy nastaveni, IX, vyvazeni volani, bank a hlidani pameti pod kodem.
+Program/TAP beze zmeny (+0 B). Uzivatel pri opakovani pad nereprodukoval;
+nasleduje overeni na realnem stroji, pricina puvodniho padu nepotvrzena.
+
+Nize je historicky stav pred doplnenim posunu obrazu.
+
+## Vyber profilu: sdileny kurzor a CALL G
+
+Seznam ma nadpis Your profiles: a stejny kurzor pres cely radek jako adresar.
+Vstup draw_cursor_row sdili skutecny vykreslovaci kod, preskakuje pouze
+adresarove mapovani banky. Pri kresleni profilu zustava pripojena banka 6.
+Nadpis a zvyrazneni se pri navratu uklizi; pozice adresare se nemeni.
+G je obsluhovane CALL Z, navrat RET s A=0. Limit stale 32 profilu.
+
+Banka 6 nyni 962 B, hlavni kod proti 19f060d +38 B: celkem +556 B.
+Proti predchozi variante G je to celkem +31 B (banka +35, hlavni kod -4).
+SARA_LOADER.tap 25 737 B, SARA2 962 B, CFG nejvyse 15 421 B.
+Volno do #BFE0 6 657 B. Preklad bez chyb/varovani. Proslo 3 009 kontrol:
+688 CFG, 342 profiloveho vyberu a 1 979 ostatnich regresnich kontrol.
+Testy kontroluji i skutecny zapis celeho radku a zasobnik pri CALL klavesy G.
+Ukazkovy soubor uzivatel prejmenoval ze sara.cfg.txt na sara.cfg; testy jej
+ctou pod novym nazvem. Podrobnosti viz tests/cfg-profiles-audit.md.
+Nove low-level Wi-Fi rutiny stale nejsou overene na realnem hardwaru.
+Novy vyber a vzhled jeste overit v emulatoru, upload zustava nefunkcni.
+
+Nize je historicky stav prvni varianty vyberu G pred sdilenym kurzorem.
+
+## Vyber CFG profilu za chodu — klavesa G
+
+Implementovan vyber prvnich 32 profilu podle Name=, po 8 na stranku.
+G vzdy znovu nacte sara.cfg. Sipky meni hodnoty v kolonkach, Enter ponecha
+vybrany profil, BREAK vrati nastaveni pred vstupem. Port je ve vyzve vyberu.
+FTP spojeni se samotnym vyberem nemeni. Navrat obnovi cachovany adresar
+vcetne puvodni pozice, bez PWD, noveho LISTu nebo zasahu do historie.
+
+Kod je ve 2nd_program_bank.asm, banka 6. Zaloha vyuziva existujici INPBUFF,
+neni pridana dalsi zalozni pamet ani tabulka vsech profilu. Opet pouzit CFG
+parser a tiskove rutiny. Doplnena kontrola delky CFG pred nactenim tela
+souboru a oprava tisku prazdneho maskovaneho hesla.
+
+Proti 19f060d celkem +525 B: banka 6 z 444 na 927 B (+483), hlavni kod +42 B.
+Volno do #BFE0 6 653 B. SARA_LOADER.tap 25 702 B; SARA1 24 576 B, SARA2 927 B.
+Limit 32 i 64 zabira stejne; zvoleno 32 podle uzivatele. Proti prvni variante
+vyberu se 16bitovymi indexy usetreno 9 B v bance 6 a dalsich 6 B v trampoline.
+Preklad bez chyb/varovani, 688 CFG a 132 browser kontrol, drivejsi regrese 1979.
+Podrobnosti a meze overeni viz tests/cfg-profiles-audit.md. Novy vizualni vyber
+jeste vyzkouset v emulatoru. Nove low-level Wi-Fi rutiny nadale cekaji na realny
+hardware; upload zustava odlozeny nefunkcni problem. Zatim bez noveho commitu.
+
+Nize jsou historicke checkpointy pred pridanim vyberu G.
+
 ## Aktualni checkpoint CFG — 27. 10. 2026
 
 BS-DOS verze umi nacist soubor sara.cfg a prevzit z nej vychozi profil

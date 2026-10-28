@@ -1,15 +1,29 @@
-; Bank 6: optional sara.cfg, fixed profile order as documented in sara.cfg.txt.
-; load_cfg: bank 6 must already be mapped. NC = applied,
-; C = absent, aborted, too large, no default or invalid profile (settings kept).
-; Uses GETSUB body length (32-bit), not the tape header length. No load_init:
-; the shared disk buffer is not initialized yet at this point during startup.
+; Second program bank (RAM 6). CFG startup and runtime profile selection.
+; All entries require bank 6 mapped. No directory paging calls from this bank.
 
 load_cfg:
+        call    cfg_read_file
+        ret     c
+        jp      parse_cfg
+
+; Reuse the existing BS-DOS loader, without applying Default=1 during browsing.
+; OUT: NC, HL=buffer, BC=length, zero-terminated; C=missing/oversized/empty CFG.
+cfg_read_file:
         ld      hl,cfg_name
 	call	file_exist+3
-	ret	nz			;soubor cfg neexistuje, vrat se a pokracuj s hodnotami danymi programem
+	jr      nz,.bad
 
 	call	load_init
+        ld      hl,(blen+2)
+        ld      a,h
+        or      l
+        jr      nz,.bad
+        ld      hl,(flen)
+        dec     hl
+        ld      de,cfg_capacity
+        or      a
+        sbc     hl,de
+        jr      nc,.bad
 
 	ld	ix,cfg_file_here
 	push	ix
@@ -17,12 +31,14 @@ load_cfg:
 
 	ld	bc,(flen)
 	pop	hl
+	push    hl
 	add	hl,bc
-;	inc	hl
 	ld	(hl),0			;uzavri konfigurak nulou
-
-	sbc	hl,bc			;vrat HL na puvodni hodnotu
-;	dec	hl
+        pop     hl
+        or      a
+        ret
+.bad:   scf
+        ret
 
 
 ; HL = buffer, BC = length. Check end+1 before writing the sentinel.
@@ -269,6 +285,356 @@ cfg_profile_start:  dw 0
 cfg_number:         dw 0
 cfg_apply:          db 0
 cfg_profile_name:   ds 32
+
+; G selector (first 32 profiles). Returns with IX=flag1. INPBUFF holds the original settings, so no extra backup buffer
+; is allocated. Every preview starts from that snapshot (empty File/Start
+; therefore keep the settings from entry, not those of another preview).
+cfg_browser:
+        ld      hl,var_name
+        ld      de,INPBUFF
+        ld      bc,cfg_settings_len
+        ldir
+        ld      hl,ftp_port
+        ld      bc,6
+        ldir
+        ld      hl,cfg_profile_name
+        ld      bc,32
+        ldir
+        call    cfg_read_file
+        jr      c,.missing
+        xor     a
+        ld      (cfg_selected),a
+        ld      (cfg_top),a
+        ld      b,a
+        call    cfg_seek_profile
+        jr      c,.missing
+        ld      ix,flag1
+        call    cfg_draw_profiles
+.preview:
+        call    cfg_preview
+        call    cfg_draw_cursor
+.keys:
+        call    KEYSCAN
+        cp      1
+        jr      z,.cancel
+        cp      13
+        jr      nz,.move
+        ld      a,(cfg_valid)
+        or      a
+        jr      nz,cfg_close
+        jr      .keys
+.move:
+        ld      hl,cfg_selected
+        ld      b,(hl)
+        cp      11
+        jr      nz,.down
+        ld      a,b
+        or      a
+        jr      z,.keys
+        dec     b
+        jr      .select
+.down:
+        cp      10
+        jr      nz,.keys
+        inc     b
+        bit     5,b
+        jr      nz,.keys
+        push    bc
+        call    cfg_seek_profile
+        pop     bc
+        jr      c,.keys
+.select:
+        push    bc
+        call    cfg_hide_cursor
+        pop     bc
+        ld      a,b
+        ld      (cfg_selected),a
+        ld      hl,cfg_top
+        sub     (hl)
+        cp      8
+        jr      c,.preview             ; move only the cursor inside the window
+        jr      nz,.above             ; row -1: reveal the preceding profile
+        inc     (hl)
+        ld      a,15                   ; row 8: reveal the next profile below
+        jr      .scroll
+.above:
+        dec     (hl)
+        ld      a,8
+.scroll:
+        ld      (cfg_draw_row),a
+        call    cfg_scroll
+        ld      a,(cfg_selected)
+        ld      b,a
+        call    cfg_seek_profile
+        call    cfg_draw_name
+        jr      .preview
+.missing:
+        ld      ix,flag1
+        ld      de,cfg_missing_text
+        call    print_ez1
+        call    akey1
+.cancel:
+        call    cfg_restore_settings
+        call    cfg_show_settings
+cfg_close:
+        call    cfg_clear_window
+        ld      hl,txt_adr_mezera
+        ld      de,spaces
+        jp      PRINTHL
+
+; Find Name= lines directly in the CFG; no duplicate directory/index table.
+; OUT: HL=Name line, DE=name value, BC=value length, C=EOF.
+cfg_find_name:
+.next:
+        call    cfg_get_line
+        ret     c
+        push    hl
+        ld      de,cfg_fields           ; first descriptor starts with Name=
+        call    cfg_match_key
+        pop     de
+        jr      nc,.found
+        ld      hl,(cfg_next_line)
+        jr      .next
+.found:
+        ex      de,hl
+        ret
+
+; B=zero-based profile index (0..31). Rescanning saves a pointer table.
+cfg_seek_profile:
+        ld      hl,cfg_file_here
+.next:
+        push    bc
+        call    cfg_find_name
+        pop     bc
+        ret     c
+        ld      a,b
+        or      a
+        ret     z
+        dec     b
+        ld      hl,(cfg_next_line)
+        jr      .next
+
+cfg_draw_profiles:
+        call    cfg_clear_window
+        ld      hl,txt_adr_mezera
+        ld      de,cfg_title
+        call    PRINTHL
+        ld      b,0
+        call    cfg_seek_profile
+        ret     c
+        ld      a,8
+        ld      (cfg_draw_row),a
+.row:
+        call    cfg_draw_name
+        ld      hl,cfg_draw_row
+        inc     (hl)
+        ld      a,(hl)
+        cp      16
+        ret     z
+        ld      hl,(cfg_next_line)
+        call    cfg_find_name
+        ret     c
+        jr      .row
+
+; DE=name value, cfg_draw_row=text row. Used for initial fill and one new row.
+cfg_draw_name:
+        ld      hl,cfg_profile_name
+        ld      b,31
+.copy:
+        ld      a,(de)
+        or      a
+        jr      z,.end_name
+        cp      13
+        jr      z,.end_name
+        cp      10
+        jr      z,.end_name
+        ld      (hl),a
+        inc     hl
+        inc     de
+        djnz    .copy
+.end_name:
+        ld      (hl),0
+        ld      a,(cfg_draw_row)
+        ld      h,a
+        ld      l,0
+        ld      de,cfg_profile_name
+        jp      PRINTHL
+
+; A=8 scrolls down, A=15 scrolls up. Copy overlapping pixels in the safe
+; direction and clear only the newly exposed row. Cursor is already removed.
+cfg_scroll:
+        IFDEF hgfx64x24
+        push    af
+        ld      hl,0
+        ld      (VIDEO_REGS.OFFSET_X),hl
+        ld      (VIDEO_REGS.OFFSET_X_R),hl
+        ld      l,64
+        ld      (VIDEO_REGS.OFFSET_Y),hl
+        ld      (VIDEO_REGS.OFFSET_Y_R),hl
+        ld      a,#FF
+        ld      (VIDEO_REGS.MASK),a
+        ld      a,PLANAR_MODE_COPY
+        ld      (VIDEO_REGS.PLANAR_MODE),a
+        pop     af
+        ENDIF
+        cp      8
+        IFDEF hgfx64x24
+        ld      hl,SCR_ADDR+3583
+        ld      de,SCR_ADDR+4095
+        ELSE
+        ld      hl,#48DF
+        ld      de,#48FF
+        ENDIF
+        ld      a,#B8                  ; LDDR when the content moves down
+        jr      z,.copy
+        IFDEF hgfx64x24
+        ld      hl,SCR_ADDR+512
+        ld      de,SCR_ADDR
+        ELSE
+        ld      hl,#4820
+        ld      de,#4800
+        ENDIF
+        ld      a,#B0                  ; LDIR when the content moves up
+.copy:
+        ld      (.transfer+1),a        ; bank 6 is writable RAM
+.stripe:
+        IFDEF hgfx64x24
+        ld      bc,3584                ; seven 512-byte HGFX character rows
+        ELSE
+        push    hl
+        push    de
+        ld      bc,224                 ; seven 32-byte ZX rows per pixel stripe
+        ENDIF
+.transfer:
+        ldir
+        IFDEF hgfx64x24
+        ld      a,PLANAR_MODE_ATTR
+        ld      (VIDEO_REGS.PLANAR_MODE),a
+        ld      a,(cfg_draw_row)
+        ld      c,a
+        ld      b,1
+        call    cls_9_lines
+        jp      set_hgfx_ink_planar
+        ELSE
+        pop     de
+        pop     hl
+        inc     h
+        inc     d
+        bit     3,h
+        jr      nz,.stripe             ; #48..#4F, stop on #50
+        ld      a,(cfg_draw_row)
+        sub     8
+        rrca
+        rrca
+        rrca
+        ld      l,a
+        ld      h,#48
+        ld      b,8
+        jp      cls_9_lines
+        ENDIF
+
+cfg_clear_window:
+        IFDEF hgfx64x24
+        ld      a,#FF                  ;clear text, markers and old cursor plane
+        ld      (VIDEO_REGS.MASK),a
+        ENDIF
+        call    cls_9
+        IFDEF hgfx64x24
+        jp      set_hgfx_ink_planar
+        ELSE
+        ld      hl,#5900
+        ld      de,#5901
+        ld      bc,255
+        ld      (hl),7
+        ldir
+        ret
+        ENDIF
+
+; Use the directory's full-width renderer, skipping its bank-mapping prelude.
+cfg_draw_cursor:
+        IFDEF hgfx64x24
+        ld      bc,unmark_cursor
+        ELSE
+        ld      a,unmark_cursor
+        ENDIF
+        jr      cfg_cursor
+cfg_hide_cursor:
+        IFDEF hgfx64x24
+        ld      bc,unmark_no_curs
+        ELSE
+        ld      a,unmark_no_curs
+        ENDIF
+cfg_cursor:
+        push    af
+        ld      a,(cfg_selected)
+        ld      hl,cfg_top
+        sub     (hl)
+        rrca
+        rrca
+        rrca
+        ld      l,a
+        ld      h,#59
+        pop     af
+        IFDEF hgfx64x24
+        ld      e,planar_kurzor
+        ENDIF
+        jp      draw_cursor_row
+
+cfg_preview:
+        call    cfg_restore_settings
+        ld      hl,cfg_selected
+        ld      b,(hl)
+        call    cfg_seek_profile
+        ld      (cfg_next_line),hl
+        ld      (cfg_profile_start),hl
+        xor     a
+        ld      (cfg_apply),a
+        call    cfg_profile
+        ld      a,1
+        jr      nc,.valid
+        xor     a
+.valid:
+        ld      (cfg_valid),a
+        call    cfg_show_settings
+        ld      de,cfg_help_text
+        call    print_ez1
+        ld      de,ftp_port
+        call    PRINT
+        ld      a,(cfg_valid)
+        or      a
+        ret     nz
+        ld      hl,txt_adr_edit_zone2
+        ld      de,cfg_invalid_text
+        jp      PRINTHL
+
+cfg_restore_settings:
+        ld      hl,INPBUFF
+        ld      de,var_name
+        ld      bc,cfg_settings_len
+        ldir
+        ld      de,ftp_port
+        ld      bc,6
+        ldir
+        ld      de,cfg_profile_name
+        ld      bc,32
+        ldir
+        ret
+
+cfg_show_settings:
+        ld      ix,flag1
+        call    prn_file_start
+        jp      prn_host_usr_psw
+
+cfg_settings_len equ cfg_name-var_name
+        ASSERT cfg_settings_len+6+32 <= 256
+cfg_selected:       db 0
+cfg_top:            db 0
+cfg_draw_row:       db 0
+cfg_valid:          db 0
+cfg_help_text:      db "Up/Down Enter=OK BREAK=cancel Port: ",0
+cfg_missing_text:   db "CFG missing/invalid",0
+cfg_invalid_text:   db "Invalid CFG profile",0
+cfg_title:          db "Your profiles:",0
 
 cfg_file_here:
 cfg_capacity equ #FFFF-cfg_file_here  ; last byte reserved for zero terminator

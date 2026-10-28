@@ -60,6 +60,7 @@ function makeCpu(code, bios, S, options={}) {
  case 0x26:h=m[pc++];break;case 0x16:d=m[pc++];break;
  case 0xb3:a|=e;logic();break;case 0xb7:logic();break;case 0xb1:a|=c;logic();break;
  case 0xe6:a&=m[pc++];logic();break;
+ case 0xf6:a|=m[pc++];logic();break;
  case 0xc6:{let n=a+m[pc++];a=n&255;z=a===0;cf=n>255;break;}
  case 0x09:{let n=hl()+bc();cf=n>65535;n&=65535;h=n>>8;l=n&255;break;}
  case 0x19:{let n=hl()+de();cf=n>65535;n&=65535;h=n>>8;l=n&255;break;}
@@ -70,7 +71,7 @@ function makeCpu(code, bios, S, options={}) {
  case 0x0c:c=(c+1)&255;z=c===0;break;case 0x04:b=(b+1)&255;z=b===0;break;case 0x3c:a=(a+1)&255;z=a===0;break;
  case 0x0f:cf=!!(a&1);a=(a>>1)|(cf?128:0);break;
  case 0x1f:{const old=cf;cf=!!(a&1);a=(a>>1)|(old?128:0);break;}
- case 0xcb:{const op2=m[pc++];if(op2===0x79)z=!(c&128);else if(op2===0x47)z=!(a&1);else if(op2>=0x40&&op2<=0x7f)z=!(get(op2&7)&(1<<((op2>>3)&7)));else if(op2>=0x80){const mask=1<<((op2>>3)&7);put(op2&7,op2>=0xc0?get(op2&7)|mask:get(op2&7)&~mask);}else throw Error("CB "+op2);break;}
+ case 0xcb:{const op2=m[pc++];if(op2>=0x18&&op2<=0x1f){const v=get(op2&7),old=cf;cf=!!(v&1);const result=(v>>1)|(old?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x38&&op2<=0x3f){const v=get(op2&7);cf=!!(v&1);put(op2&7,v>>1);z=(v>>1)===0;}else if(op2===0x79)z=!(c&128);else if(op2===0x47)z=!(a&1);else if(op2>=0x40&&op2<=0x7f)z=!(get(op2&7)&(1<<((op2>>3)&7)));else if(op2>=0x80){const mask=1<<((op2>>3)&7);put(op2&7,op2>=0xc0?get(op2&7)|mask:get(op2&7)&~mask);}else throw Error("CB "+op2);break;}
  case 0xdd:{const op2=m[pc++];if(op2===0x21){ix=word();break;}if(op2===0xe5){stack.push(ix);break;}if(op2===0xe1){ix=stack.pop();break;}if(op2===0x19){const n=ix+de();cf=n>65535;ix=n&65535;break;}const disp=m[pc++];const addr=(ix+(disp<128?disp:disp-256))&65535;if([0x46,0x4e,0x56,0x5e,0x66,0x6e,0x7e].includes(op2)){put((op2>>3)&7,m[addr]);break;}if(op2===0x77){m[addr]=a;break;}if(op2===0x36){m[addr]=m[pc++];break;}if(op2===0x34||op2===0x35){m[addr]=(m[addr]+(op2===0x34?1:-1))&255;z=m[addr]===0;break;}if(op2===0xbe){cp(m[addr]);break;}if(op2!==0xcb)throw Error('DD '+op2);const bitop=m[pc++],mask=1<<((bitop>>3)&7);if(bitop<0x80){z=!(m[addr]&mask);}else if(bitop<0xc0){m[addr]&=255^mask;}else{m[addr]|=mask;}break;}
  case 0xed:{
  const o=m[pc++];const port=bc();
@@ -85,7 +86,7 @@ function makeCpu(code, bios, S, options={}) {
  else if(o===0x52){let n=hl()-de()-(cf?1:0);cf=n<0;n&=65535;h=n>>8;l=n&255;z=n===0;}
  else if(o===0x53){let addr=word();m[addr]=e;m[addr+1]=d;}
  else if(o===0x5b){let addr=word();e=m[addr];d=m[addr+1];}
- else if(o===0xb0){let count=bc(),src=hl(),dst=de();for(let i=0;i<count;i++)m[(dst+i)&65535]=m[(src+i)&65535];src=(src+count)&65535;dst=(dst+count)&65535;h=src>>8;l=src&255;d=dst>>8;e=dst&255;b=c=0;}
+ else if(o===0xb0||o===0xb8){let count=bc(),src=hl(),dst=de(),dir=o===0xb0?1:-1;for(let i=0;i<count;i++)m[(dst+dir*i)&65535]=m[(src+dir*i)&65535];src=(src+dir*count)&65535;dst=(dst+dir*count)&65535;h=src>>8;l=src&255;d=dst>>8;e=dst&255;b=c=0;}
  else throw Error("ED "+o.toString(16));break;}
  case 0xc0:if(!z)pc=stack.pop();break;case 0xc8:if(z)pc=stack.pop();break;case 0xc9:pc=stack.pop();break;
  default:
@@ -94,6 +95,7 @@ function makeCpu(code, bios, S, options={}) {
  if((op&0xc7)===4||(op&0xc7)===5){let i=(op>>3)&7,v=(get(i)+((op&1)?-1:1))&255;put(i,v);z=v===0;break;}
  if(op>=0xb8&&op<=0xbf){cp(get(op&7));break;}
  if(op>=0xb0&&op<=0xb7){a|=get(op&7);logic();break;}
+ if(op>=0xa0&&op<=0xa7){a&=get(op&7);logic();break;}
  if(op>=0x80&&op<=0x87){let n=a+get(op&7);a=n&255;cf=n>255;z=a===0;break;}
  if(op>=0x90&&op<=0x97){let v=get(op&7);cf=a<v;a=(a-v)&255;z=a===0;break;}
  throw Error("Unsupported "+op.toString(16)+" at "+at.toString(16));

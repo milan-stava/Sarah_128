@@ -17,7 +17,9 @@ function cfgRegression(makeCpu,image,bios,S,bank6,sample) {
   for(const [n,v] of Object.entries({cfg_profile_name:'Home Lenovo',host_url:'192.168.0.105',ftp_port:'21',var_user:'hood',var_pasw:'',var_name:'SARAH12BSD'}))assert(str(x.u.m,S[n])===v,'selected '+n);
   assert(word(x.u.m,S.var_start)===24576,'selected Start=24576');
  }
- selected(run(sample));
+ selected(run(profile()));
+ {const x=run(sample);const fields={};let active=false;for(const l of sample.split(/\r?\n/)){if(l==='Default=1'){active=true;continue;}if(active){const m=l.match(/^(Name|Host|Port|User|Pass|File|Start)=(.*)$/);if(m)fields[m[1]]=m[2];if(l.startsWith('Start='))break;}}
+  assert(!x.r.carry&&str(x.u.m,S.cfg_profile_name)===fields.Name&&str(x.u.m,S.host_url)===fields.Host&&str(x.u.m,S.ftp_port)===fields.Port,'current sample default profile');}
  for(const eol of ['\n','\r','\r\n'])for(const finalEol of ['',eol]) {
   selected(run(('; comment\n \t; indented comment\n\n'+profile({Default:'0',Host:'ignored'})+'\n'+profile()+'\n'+profile({Host:'later'})).replace(/\n/g,eol)+finalEol));
  }
@@ -41,20 +43,23 @@ function cfgRegression(makeCpu,image,bios,S,bank6,sample) {
  assert(!limits.r.carry,'maximum field lengths fit');assert(str(limits.u.m,S.var_user)==='u'.repeat(31),'Host terminator does not damage User');
  for(const text of [profile(),profile({File:'name=with=equals',Pass:'a=b;c'})]){const x=run(text);assert(!x.r.carry,'equals inside values');}
  const sizes=[0,1,...Array.from({length:15},(_,i)=>[1024*(i+1)-1,1024*(i+1),1024*(i+1)+1]).flat(),S.cfg_capacity,S.cfg_capacity+1,65536,65537,0xffffffff];
- for(const len of sizes)for(const failure of ['none',...(len===1025?['missing','search-abort','position-abort','header','header-abort','load']:[])]) {
-  let loads=0,services=[];const text=profile();let u;
+ for(const len of sizes)for(const failure of ['none',...(len===1025?['missing','header','load']:[])]) {
+  let loads=0,services=[],diskError=false;const text=profile(),stop={};let u;
   u=make((pc,r)=>{
+   if(pc===S.error_handler){diskError=true;throw stop;}
+   if(pc===S.next_params)return {ret:true,carry:false};
    if(pc!==S.bsdos)return;
    services.push(r.a);
    if(r.a===S.seasx){assert(String.fromCharCode(...r.m.slice(r.hl,r.hl+10))==='sara.cfg  ','BS-DOS padded filename');return {ret:true,z:failure!=='missing',carry:failure!=='search-abort'};}
    if(r.a===S.getcst)return {ret:true,hl:7,carry:failure!=='position-abort'};
    if(r.a===S.getsub){assert(r.bc===7&&r.ix===S.header,'GETSUB file/header');for(let j=0;j<4;j++)r.m[S.blen+j]=(len/2**(8*j))&255;r.m[S.flen]=0xff;r.m[S.flen+1]=0xff;return {ret:true,z:failure==='header',carry:failure!=='header-abort',ix:0x7777,iy:0x8888};}
+   if(r.a===S.howsec)return {ret:true,bc:Math.ceil(len/1024)};
    if(r.a===S.loa1x){loads++;assert(r.hl===7&&r.bc===0&&r.ix===S.cfg_file_here&&(r.de&255)===Math.ceil(len/1024),'LOA1X correct file, destination, sectors');u.m.fill(32,S.cfg_file_here,S.cfg_file_here+len);u.m.set(bytes(text.slice(0,len)),S.cfg_file_here+Math.max(0,len-text.length));return {ret:true,carry:failure!=='load',ix:0x9999,iy:0xaaaa};}
    throw Error('unexpected BS-DOS service '+r.a);
   });
   const before=snapshot(u),beforeBank=Array.from(u.m.slice(0xc000,S.cfg_file_here));u.m[0xbfff]=0xa5;
-  const r=u.call(S.load_cfg);
-  assert(r.ix===S.flag1&&r.iy===0,'load_cfg preserves IX and IY');
+  let r;try{r=u.call(S.load_cfg);}catch(e){if(e!==stop)throw e;r={carry:true};}
+  assert(diskError===['header','load'].includes(failure),'existing disk errors use error handler');
   assert(u.m[0xbfff]===0xa5,'loading stays above fixed main code');
   assert(same(Array.from(u.m.slice(0xc000,S.cfg_next_line)),beforeBank.slice(0,S.cfg_next_line-0xc000)),'loading preserves bank-6 routines');
   const expected=len>0&&len<=S.cfg_capacity&&failure==='none';
@@ -71,5 +76,5 @@ if(typeof require!=='undefined'&&typeof module!=='undefined') {
  const fs=require('fs'),vm=require('vm');vm.runInThisContext(fs.readFileSync('tests/z80-directory.js','utf8'));
  const S={};for(const l of fs.readFileSync('directory-test.sym','utf8').split(/\r?\n/)){const m=l.match(/^v0\.(\S+): EQU 0x([0-9A-F]+)/i);if(m)S[m[1]]=parseInt(m[2],16);}
  const tape=fs.readFileSync('SARA_LOADER.tap'),blocks=[];for(let p=0;p<tape.length;){const n=tape.readUInt16LE(p);blocks.push(tape.subarray(p+2,p+2+n));p+=n+2;}
- console.log(cfgRegression(makeCpu,fs.readFileSync('SARAH12BSDhgfx'),fs.readFileSync('WifiBios20_MB_EL.cod'),S,blocks[5].subarray(1,-1),fs.readFileSync('sara.cfg.txt','utf8')));
+ console.log(cfgRegression(makeCpu,fs.readFileSync('SARAH12BSDhgfx'),fs.readFileSync('WifiBios20_MB_EL.cod'),S,blocks[5].subarray(1,-1),fs.readFileSync('sara.cfg','utf8')));
 }

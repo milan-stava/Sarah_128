@@ -1,4 +1,10 @@
-# Current compact loader checkpoint — 2026-10-27
+# Current runtime profile selector
+
+The current G selector, file-reader changes, byte counts and validation are
+documented in [cfg-profiles-audit.md](cfg-profiles-audit.md). The following
+sections describe historical loader versions.
+
+# Historical compact loader checkpoint — 2026-10-27
 
 The user manually shortened the bank-6 module and renamed it to
 2nd_program_bank.asm. The current module occupies 444 bytes (81 fewer than
