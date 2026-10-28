@@ -1,5 +1,25 @@
 # Prefilled INPUT and empty passwords
 
+Current keyboard-rollover fix: +14 bytes versus a6958e3, bios_start #A45C,
+6,500 bytes free before #BFE0. Total INPUT growth versus 4603dbd is 157 B;
+bank 6 remains 1,066 B and SARA_LOADER.tap remains 25,841 B.
+
+INKEY returns code 1 for both BREAK and two overlapping ordinary keys. The
+new INPUT cancellation handling in a6958e3 wrongly treated either as BREAK.
+INPUT now checks active-low bit 0 of #7FFE (SPACE) and #FEFE (CAPS SHIFT)
+before cancelling. Other overlaps leave the text/cursor intact and continue
+waiting. KEYSCAN, INKEY, repeat timing and key waits are unchanged.
+
+Validation: 13,432 BSDOS checks pass, including 429 INPUT checks; the INPUT
+suite also passes 417 HGFX and 429 ESXDOS checks. Builds have no errors/warnings
+and TAP checksums pass. The tests execute actual INKEY with six key matrices
+and check rollover through ordinary and masked fields, partial/released BREAK,
+true BREAK, continued typing and confirmation. Disabling the new physical-key
+gate makes the regression fail. The user confirmed the fix in the emulator on
+2026-10-28; real-hardware and Wi-Fi/FTP validation remain pending.
+
+The following records the original feature as committed in a6958e3:
+
 Compared with commit 4603dbd, the BSDOS fixed-memory code grows by 143 bytes:
 bios_start moves from #A3BF to #A44E; bios_len stays 544 bytes. There are
 6,514 bytes free before #BFE0. Program bank 6 stays 1,066 bytes and its CFG

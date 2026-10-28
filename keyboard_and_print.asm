@@ -911,8 +911,16 @@ INQQQ    call KEYSCAN
 ;         ld   a,(hl)
 ;         or   a
 ;         jr   z,INQQQ
-         cp   1                       ; BREAK; legacy code 4 also cancels (not EDIT/CS+1)
+         cp   1                       ; INKEY also returns 1 for two ordinary keys
          jr   nz,IN_CHECK_END
+         ld   a,#7F
+         in   a,(#FE)                 ; SPACE in row #7FFE, active low bit 0
+         rrca
+         jr   c,INQQQ                 ; ordinary rollover is not cancellation
+         ld   a,#FE
+         in   a,(#FE)                 ; CAPS SHIFT in row #FEFE
+         rrca
+         jr   c,INQQQ
          ld   a,4
 IN_CHECK_END:
          cp   4

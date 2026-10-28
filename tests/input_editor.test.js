@@ -7,12 +7,15 @@ function inputEditorRegression(makeCpu,image,bios,S) {
  const str=(m,p,n=256)=>{let s='';while(m[p]&&n--)s+=String.fromCharCode(m[p++]);return s;};
  const text=m=>str(m,S.INPBUFF).trimEnd();
  function run({initial='',keys=[13],entry='input_line_edit',mask=false,limit=63,setup,regs={},realDraw=false}={}) {
-  let u,chars=[],frames=[],snapshots=[],cancelled=false,done=false;const stop={};
+  let u,chars=[],frames=[],snapshots=[],cancelled=false,done=false,keyState={};const stop={};
   const queue=keys.slice();
-  u=makeCpu([],bios,S,{image,hook:(pc,r)=>{
+  u=makeCpu([],bios,S,{image,onIn:port=>{
+   assert(port===0x7ffe||port===0xfefe,'BREAK check reads only SPACE/CAPS rows');
+   return (port===0x7ffe?keyState.space:keyState.caps)?0xfe:0xff;
+  },hook:(pc,r)=>{
    if(pc===S.WTKY)return {ret:true};
    if(pc===S.CHAR){chars.push(r.a);if(!realDraw)return {ret:true,hl:(r.hl&0xff00)|((r.hl+1)&255)};}
-   if(pc===S.KEYSCAN){frames.push(chars);chars=[];snapshots.push({text:text(r.m),raw:Array.from(r.m.slice(S.INPBUFF,S.INPBUFF+64)),cursor:r.m[S.CURSOR+1]});if(!queue.length)throw Error('unexpected keyboard wait');return {ret:true,a:queue.shift(),bc:0x1c55};}
+   if(pc===S.KEYSCAN){frames.push(chars);chars=[];snapshots.push({text:text(r.m),raw:Array.from(r.m.slice(S.INPBUFF,S.INPBUFF+64)),cursor:r.m[S.CURSOR+1]});if(!queue.length)throw Error('unexpected keyboard wait');const key=queue.shift();keyState=typeof key==='object'?key:{code:key,caps:key===1,space:key===1};return {ret:true,a:keyState.code,bc:0x1c55};}
    if([S.print_ez1,S.prn_host_usr_psw,S.prn_file_start].includes(pc))return {ret:true};
    if(pc===S.clear_ini_keyl){cancelled=true;throw stop;}
    if([S.send_string,S.directory_retrieve].includes(pc))throw Error('input setter performs network operation');
@@ -44,6 +47,24 @@ function inputEditorRegression(makeCpu,image,bios,S) {
  x=run({initial:'a'.repeat(63),keys:[90,...Array(63).fill(8),...Array(64).fill(15),13]});assert(x.text===''&&x.result.bc===0,'full-buffer insertion/deletion stays bounded');
  x=run({keys:[...Array(70).fill(65),13]});assert(x.text==='A'.repeat(63)&&x.result.bc===63,'63 visible characters plus cursor, no overflow');
  for(const key of [1,4]){x=run({initial:'old',keys:[199,120,key]});assert(x.result.z&&x.result.a===4,'BREAK/legacy code 4 cancels '+key);}
+ for(const [caps,space] of [[false,false],[false,true],[true,false]]) {
+  const overlap={code:1,caps,space};
+  x=run({initial:'original',keys:[199,97,overlap,98,overlap,13]});assert(x.text==='ab'&&!x.result.z,'overlapping keys keep INPUT open and editable '+caps+'/'+space);
+  x=run({entry:'set_user',keys:[199,97,overlap,98,13],setup:m=>put(m,S.var_user,'old')});assert(!x.cancelled&&str(x.u.m,S.var_user)==='ab','setter confirms after overlapping keys '+caps+'/'+space);
+  x=run({entry:'set_pass',mask:true,keys:[199,97,overlap,98,13],setup:m=>put(m,S.var_pasw,'old')});assert(!x.cancelled&&str(x.u.m,S.var_pasw)==='ab'&&x.u.m[S.INX_HS+1]===0,'masked password survives overlap '+caps+'/'+space);
+ }
+ // Execute actual INKEY against a keyboard matrix: BREAK and rollover both
+ // yield code 1, so INPUT must inspect the physical keys to distinguish them.
+ for(const [rows,expected] of [
+  [{0xfdfE:0xfc},1],                   // A+S
+  [{0xfbfe:0xfc},1],                   // Q+W
+  [{0x7ffe:0xfe,0xfefe:0xfe},1],       // CAPS SHIFT+SPACE
+  [{0x7ffe:0xfe,0xfdfe:0xfe},1],       // SPACE+A
+  [{0xfefe:0xfe,0xfdfe:0xfe},65],      // CAPS SHIFT+A
+  [{0x7ffe:0xfd,0xfbfe:0xfe},199],     // SYMBOL SHIFT+Q
+ ]) {
+  const u=makeCpu([],bios,S,{image,onIn:port=>rows[port]??0xff});const result=u.call(S.inkey);assert(result.a===expected,'real INKEY reports matrix '+JSON.stringify(rows));
+ }
  for(const mask of [false,true])for(const keys of [[13],[199,13],[199,110,101,119,13],[199,1],[199,4]]) {
   x=run({entry:'set_pass',mask,keys,setup:m=>put(m,S.var_pasw,'Secret')});
   const cancel=keys.at(-1)!==13,expected=cancel?'Secret':keys.length===1?'Secret':keys.length===2?'':'new';

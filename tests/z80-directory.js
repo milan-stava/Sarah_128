@@ -18,6 +18,7 @@ function makeCpu(code, bios, S, options={}) {
  case 0x31:{const sp=word();stack.length=(0xf000-sp)/2;break;}
  case 0x00:break;
  case 0x2f:a^=255;break;
+ case 0xdb:{const port=(a<<8)|m[pc++];if(!options.onIn)throw Error('Unexpected IN '+port.toString(16));a=options.onIn(port)&255;break;}
  case 0x08:[a,aa]=[aa,a];[z,az]=[az,z];[cf,ac]=[ac,cf];break;
  case 0xd9:{const old=[b,c,d,e,h,l];[b,c,d,e,h,l]=alt;alt=old;break;}
  case 0xeb:[d,h]=[h,d];[e,l]=[l,e];break;
@@ -72,12 +73,12 @@ function makeCpu(code, bios, S, options={}) {
  case 0x0c:c=(c+1)&255;z=c===0;break;case 0x04:b=(b+1)&255;z=b===0;break;case 0x3c:a=(a+1)&255;z=a===0;break;
  case 0x0f:cf=!!(a&1);a=(a>>1)|(cf?128:0);break;
  case 0x1f:{const old=cf;cf=!!(a&1);a=(a>>1)|(old?128:0);break;}
- case 0xcb:{const op2=m[pc++];if(op2>=0x18&&op2<=0x1f){const v=get(op2&7),old=cf;cf=!!(v&1);const result=(v>>1)|(old?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x38&&op2<=0x3f){const v=get(op2&7);cf=!!(v&1);put(op2&7,v>>1);z=(v>>1)===0;}else if(op2===0x79)z=!(c&128);else if(op2===0x47)z=!(a&1);else if(op2>=0x40&&op2<=0x7f)z=!(get(op2&7)&(1<<((op2>>3)&7)));else if(op2>=0x80){const mask=1<<((op2>>3)&7);put(op2&7,op2>=0xc0?get(op2&7)|mask:get(op2&7)&~mask);}else throw Error("CB "+op2);break;}
+ case 0xcb:{const op2=m[pc++];if(op2>=0x08&&op2<=0x0f){const v=get(op2&7);cf=!!(v&1);const result=(v>>1)|(cf?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x18&&op2<=0x1f){const v=get(op2&7),old=cf;cf=!!(v&1);const result=(v>>1)|(old?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x38&&op2<=0x3f){const v=get(op2&7);cf=!!(v&1);put(op2&7,v>>1);z=(v>>1)===0;}else if(op2===0x79)z=!(c&128);else if(op2===0x47)z=!(a&1);else if(op2>=0x40&&op2<=0x7f)z=!(get(op2&7)&(1<<((op2>>3)&7)));else if(op2>=0x80){const mask=1<<((op2>>3)&7);put(op2&7,op2>=0xc0?get(op2&7)|mask:get(op2&7)&~mask);}else throw Error("CB "+op2);break;}
  case 0xdd:{const op2=m[pc++];if(op2===0x21){ix=word();break;}if(op2===0xe5){stack.push(ix);break;}if(op2===0xe1){ix=stack.pop();break;}if(op2===0x61){ix=(ix&255)|(c<<8);break;}if(op2===0x44){b=ix>>8;break;}if(op2===0xbc){cp(ix>>8);break;}if(op2===0x19){const n=ix+de();cf=n>65535;ix=n&65535;break;}const disp=m[pc++];const addr=(ix+(disp<128?disp:disp-256))&65535;if([0x46,0x4e,0x56,0x5e,0x66,0x6e,0x7e].includes(op2)){put((op2>>3)&7,m[addr]);break;}if(op2===0x77){m[addr]=a;break;}if(op2===0x36){m[addr]=m[pc++];break;}if(op2===0x34||op2===0x35){m[addr]=(m[addr]+(op2===0x34?1:-1))&255;z=m[addr]===0;break;}if(op2===0xbe){cp(m[addr]);break;}if(op2!==0xcb)throw Error('DD '+op2);const bitop=m[pc++],mask=1<<((bitop>>3)&7);if(bitop<0x80){z=!(m[addr]&mask);}else if(bitop<0xc0){m[addr]&=255^mask;}else{m[addr]|=mask;}break;}
  case 0xed:{
  const o=m[pc++];const port=bc();
  if(o===0x73){const addr=word(),sp=0xf000-2*stack.length;m[addr]=sp&255;m[addr+1]=sp>>8;}
- else if(o===0x78){if(port!==0x793b&&port!==0x133b)throw Error("Unexpected status port");a=port===0x793b?(options.speed||0):status();z=a===0;}
+ else if(o===0x78){if(options.onIn&&(port&255)===0xfe)a=options.onIn(port)&255;else{if(port!==0x793b&&port!==0x133b)throw Error("Unexpected status port");a=port===0x793b?(options.speed||0):status();}z=a===0;}
  else if(o===0x58){if(port!==0x143b)throw Error("Unexpected RX port");e=rx.shift();if(e==null)throw Error("Read empty UART");rxReads++;z=e===0;}
  else if(o===0x59){if(port!==0x133b)throw Error("Unexpected TX port");if(options.checkTxReady&&(lastStatus&2))throw Error("Write while UART busy");sent.push(e);txBusy=options.txHoldPolls||0;if(options.onTx)options.onTx(sent.length,rx);}
  else if(o===0x79){if(port!==0x783b)throw Error("Unexpected OUT");}
@@ -98,6 +99,7 @@ function makeCpu(code, bios, S, options={}) {
  if(op>=0xb8&&op<=0xbf){cp(get(op&7));break;}
  if(op>=0xb0&&op<=0xb7){a|=get(op&7);logic();break;}
  if(op>=0xa0&&op<=0xa7){a&=get(op&7);logic();break;}
+ if(op>=0xa8&&op<=0xaf){a^=get(op&7);logic();break;}
  if(op>=0x80&&op<=0x87){let n=a+get(op&7);a=n&255;cf=n>255;z=a===0;break;}
  if(op>=0x90&&op<=0x97){let v=get(op&7);cf=a<v;a=(a-v)&255;z=a===0;break;}
  throw Error("Unsupported "+op.toString(16)+" at "+at.toString(16));

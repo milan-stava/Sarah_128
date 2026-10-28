@@ -1,6 +1,26 @@
 # Predtestovy checkpoint Wi-Fi — 22. 10. 2026
 
-## Aktualni INPUT: predvyplneni hodnot a prazdne heslo
+## Aktualni oprava INPUT: soubeh dvou klaves nerusi editaci
+
+Proti a6958e3 +14 B v hlavnim kodu, bios_start #A45C. Volno pred #BFE0
+6500 B. Banka 6 stale 1066 B, SARA_LOADER.tap stale 25841 B. Celkem INPUT
+proti 4603dbd +157 B. KEYSCAN, INKEY, opakovani klaves ani prodlevy beze zmen.
+
+INKEY vraci kod 1 jak pro BREAK, tak pro dve bezne soucasne stisknute klavesy.
+Nova interpretace kodu 1 jako zruseni INPUT v a6958e3 proto zpusobovala
+vypadnuti z editoru pri rychlem psani, bez ulozeni. INPUT nyni pri kodu 1
+overi skutecne stisknuty SPACE (#7FFE, bit 0) i CAPS SHIFT (#FEFE, bit 0).
+Pri jinem soubehu pokracuje v cekani na klavesu a zachova obsah i kurzor.
+
+Preklady BSDOS/HGFX/ESXDOS bez chyb a varovani. Vsech 13432 hlavnich BSDOS
+kontrol proslo; INPUT sam 429 BSDOS, 417 HGFX, 429 ESXDOS. Testy vykonavaji
+i skutecny INKEY s matici klaves (A+S, Q+W, BREAK, SPACE+A, CS+A a SS+Q),
+overuji ignorovani soubehu a pokracovani editace/potvrzeni uzivatele i hesla.
+Vypnuti nove fyzicke kontroly zamerne zpusobi selhani regresniho testu.
+Uzivatel 28. 10. 2026 potvrdil opravu v emulatoru. Realny hardware a Wi-Fi/FTP
+nadale cekaji na overeni. Nize je stav pred touto opravou.
+
+## INPUT v a6958e3: predvyplneni hodnot a prazdne heslo
 
 Proti commitu 4603dbd hlavni kod narostl o 143 B. bios_start #A44E,
 bios_len 544 B, volno pred #BFE0 nyni 6514 B. Banka 6 stale 1066 B,
