@@ -1,6 +1,11 @@
 ; Second program bank (RAM 6). CFG startup and runtime profile selection.
 ; All entries require bank 6 mapped. No directory paging calls from this bank.
 
+;zatim zde mame:
+;1)prace s CFG souborem, nacteni profilu, zobrazeni profilu, vyber profilu, zobrazeni vybraneho profilu
+;2)praci s TAPkou
+;3)spusteni snapu SNA a Z80
+
 load_cfg:
         call    cfg_read_file
         ret     c
@@ -635,6 +640,49 @@ cfg_help_text:      db "Up/Down Enter=OK BREAK=cancel Port: ",0
 cfg_missing_text:   db "CFG missing/invalid",0
 cfg_invalid_text:   db "Invalid CFG profile",0
 cfg_title:          db "Your profiles:",0
+
+
+;2) prace s TAPkou
+work_tap	di
+		ld	hl,tapmaster_start
+		ld	de,#4000
+		push	de
+		ld	bc,tapmaster_len
+		ldir
+		ret				;JP to TAPmaster
+tapmaster_start	DISP	#4000
+tapmaster
+		include	"tapmaster.asm"		;here hand over to TAPmaster completely
+tapmaster_len	equ	$-tapmaster
+        ENT                     ; resume physical bank-6 assembly address
+        ASSERT $ == tapmaster_start+tapmaster_len
+        ASSERT tapmaster_len > 0
+        ASSERT #4000+tapmaster_len <= SPCKO-64
+;to je cele pro TAPku
+
+;3) spusteni snapu SNA a Z80
+work_snap       ld	a,#63			;now jump into bsdos nmi menu and run snap
+		out	(23),a
+
+		or	a
+		ld	de,#B536		;text "65" (last digit inverted)
+		ld	hl,(#26D2)		;navesti VER v nmi menu
+		sbc	hl,de
+		jr	nz,slb			;NZ=nmi menu 1.64 not found
+
+		ld	hl,(fnum)
+		ld	(#5aa0),hl		;file number
+		ld	sp,#57e2
+;		jp	#d13			;load snap and JP back to nmi menu
+		jp	#11DD			;start snap autoload, v kodu nmi navesti SA6
+
+
+slb		ld	hl,txt_adr_edit_zone2
+		ld	de,nmi_not_found_txt
+                call    pts
+                jp      snap_not_found
+
+nmi_not_found_txt db "Unsupported NMI menu",0
 
 cfg_file_here:
 cfg_capacity equ #FFFF-cfg_file_here  ; last byte reserved for zero terminator

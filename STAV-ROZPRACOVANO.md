@@ -1,5 +1,192 @@
 # Predtestovy checkpoint Wi-Fi — 22. 10. 2026
 
+## Aktualni navaznost — 29. 10. 2026: spousteni TAP
+
+## ZAVERECNY CHECKPOINT PRED SPANIM — navazat zde
+
+Dodatecne uzivatel pozadal o lokalni checkpoint commit a push na origin,
+vetev fix-ftp-directory. Pred commitovanim znovu sestaveny BSDOS i ESXDOS
+vcetne projektovych TAP/bin/symbolu/listingu: oba 0 chyb, 0 varovani.
+Projektova SARA_LOADER.tap tedy jiz obsahuje posledni ulozene zmeny.
+Nize uvedeny pokyn k novemu prekladu pred testem zustava vhodny pri dalsich
+upravach; tvrzeni o starych projektovych binarkach je timto prekonane.
+Checkpoint zahrnuje rozpracovane spousteni TAP a snapshotu, test v emulatoru
+a na stroji je nadale odlozen na rano. Dokonceni commitu/pushe viz historie
+Gitu a posledni zprava chatu, nikoli starsi zminky 'NEcommitovano' nize.
+
+Uzivatel odklada emulatorovy/hardwarovy test na rano. Nasledujici krok:
+1. Precist tento checkpoint a overit aktualni zmeny, neprepisovat praci uzivatele.
+2. Pred testem aktualizovat projektove binarky pres assembly.bat: posledni
+   kontroly noveho snapshot kodu sestavovaly pouze do TEMP. Projektova TAP
+   tedy nemusi obsahovat posledni snapshot upravy.
+3. Testovat SARA_LOADER.tap (hlavni kod + banka 6), nikoli stary jediny blok.
+4. Overit ENTER na TAP: stahnout jedinou polozku pod kurzorem, rozbalit,
+   opustit Saru a spustit program. Aktualne puvodni TAP NEMAZEME:
+   flag2 db 0, bit 5 neni nastavovan. Mazani je implementovane, menu zatim ne.
+5. Overit ENTER na Z80/SNA: download, predani do konkretniho NMI menu.
+   Pri nepodporovanem menu text/klavesa/uklid a navrat do Sary s puvodni
+   RAM bankou. NMI adresy jsou dodane uzivatelem, skutecny beh neoveren.
+6. Po vysledcich testu vyresit chyby a pripravit commit; dosud NEcommitovano.
+
+Posledni ulozeny stav: obe varianty BSDOS/ESXDOS se kontrolne prekladaji
+bez chyb/varovani. Text nmi_not_found_txt je v bance 6; slb CALL pts a pak
+JP snap_not_found pod #C000; tam port23=#40, POP AF, CALL PAGE128, XOR A, RET.
+Spolecny enter_tap/enter_snap uklada puvodni PAGE128_STATE pres PUSH AF.
+Dispatch CP 3 / JP C bere TAP=0,Z80=1,SNA=2. Banka 6 ma aktualne #0843=2115 B.
+Hlavni kod s BIOSem konci #A785: volno do #BFE0 je #185B=6235 B,
+do #C000 #187B=6267 B, poslednich 32 B rezervovano pro strankovaci rutinu.
+Automaticke kontroly TAP pred snapshot zmenami: handoff 1063, pripony 2474,
+download return 26. Snapshot vetve zatim pouze kontrola zdroje a preklad.
+Nove low-level Wi-Fi stale vyzaduje realne overeni, upload zustava odlozen.
+
+Tento soubor uchovava pracovni domluvu a dalsi kroky, NIKOLI uplny prepis
+chatu. Ukladani/obnoveni historie konverzace ridi aplikace; Codex je nezarucuje.
+AGENTS.md uklada pri dalsim zahajeni tento checkpoint precist.
+Nize jsou prubezne a historicke zaznamy; prednost ma tento zaverecny stav.
+
+Nejnovejsi SNAP kontrola: nmi_not_found_txt je nyni v bance 6, pred cfg_file_here.
+Slb CALL pts tiskne/ceka/uklidi pri stale pripojene bance 6, pak JP
+snap_not_found v hlavnim kodu. Ten obnovi port23=#40, POP AF puvodni banky,
+CALL PAGE128, XOR A, RET. Umisteni textu i vyvazeni zasobniku sedi.
+BSDOS a ESXDOS kontrolni preklady do TEMP: oba 0 chyb, 0 varovani.
+ASM ani projektove binarky pri kontrole nemenene. Skutecny NMI vstup
+a ROM zavislosti pri cekani s port23=#63 zustavaji neoverene behom.
+Predchozi tvrzeni, ze port23 musi byt obnoven pred cekanim, bylo odvolano:
+nutnost neni dolozena; soucasny kod jej obnovi az po pts pred navratem.
+
+Novejsi kontrola SNAP: uzivatel opravil rozliseni na CP 3 / JP C,enter_tap
+a presunul snap_not_found pod #C000. PUSH/POP AF i navrat banky nyni sedi.
+Zbyva presunout OUT (23),#40 pred CALL pts (nyni je az po tisku/cekani)
+a definovat nmi_not_found_txt. Kontrolni BSDOS preklad: 1 chyba prave na
+chybejicim textu; ESXDOS 0 chyb/varovani. ASM pri teto kontrole nemeneno,
+vystupy pouze TEMP. Dvoji tisk uz odstranen; slb pouze pripravi HL/DE a JP.
+
+POSLEDNI KONTROLA SNAP: uzivatel doplnil work_snap (NMI menu pres port 23,
+#63, kontrola #26D2 na #B536, fnum -> #5AA0, SP=#57E2, JP #11DD).
+Vstup enter_tap/enter_snap je spolecny, po downloadu uklada PAGE128_STATE
+pres PUSH AF, prepina banku 6 a rozlisuje item_extension. Toto ulozeni sedi.
+Aktualni BSDOS kontrolni preklad do TEMP: 4 chyby (tri JR z enter_directory
+na enter_tap/enter_snap mimo rozsah +137/+133/+129, chybi nmi_not_found_txt).
+ESXDOS kontrolni preklad bez chyb/varovani. Projektove binarky neprepsany.
+Navrat slb je chybny: vola PRINTHL a pak pts (druhy tisk se zmenenymi registry),
+a po call PAGE128 pokracuje XOR/RET stale v odpojene bance 6.
+Navrh v chatu: slb obnovi port23=#40, pripravi HL/DE a JP snap_not_found
+v hlavnim kodu pod #C000; ten CALL pts, POP AF, CALL PAGE128, XOR A, RET.
+Rozliseni typu lze zkratit na CP 3 / JP C,enter_tap (kody 0/1/2).
+NMI adresy/ABI je nutno overit proti konkretni verzi NMI menu; komentar
+1.64 nesouhlasi se signaturou textu "65". ASM pri kontrole nemeneno.
+
+NOVY POZADAVEK: pridat ENTER spousteni snapshotu SNA a Z80. Rozpoznani
+pripon (A=1 Z80, A=2 SNA) a download pod kurzorem jsou k dispozici.
+V projektu ani prohledanych okolnich zdrojich nebyl nalezen BS-DOS loader
+techto formatu. TAPmaster zpracovava TAP, neni to loader SNA/Z80.
+Uzivateli polozena otazka na existujici loader nebo BS-DOS prikaz, ktery
+pouziva. Cekame na odpoved pred zapojenim; zadna snapshot ASM vetev zatim
+nepridana. Nezaměnovat start rozbaleneho BASICu pres NEW s podporou snapshotu.
+
+AKTUALNI OPRAVA: nizsi hlaseni o nefunkcni relokaci je jiz historicke.
+Na zadost uzivatele opravene DISP/ENT: blok loaderu #5B00 je oddelen od
+bloku #4000 a fyzicka pozice banky 6 se obnovuje pres ENT, bez ORG.
+Tapmaster ma 975 B, banka 6 2055 B; stpb=#5B00, rstpe=#5B6A.
+Work_tap kopiruje pri DI; az START na #4000 pres PAGE128 pripoji RAM 0.
+Bit 5 mazani se zachyti pred zmenou banky a IX. Bit 6 je stale pouze rezerva.
+Buffer seq_buff=#C400, seq_buf_len=#3800 ma predni i zadni rezervu na
+sektorove zaokrouhleni (puvodni #C000/#4000 mohlo pretekat nebo sahat pod banku).
+Inicializace mazani obrazovky ma urcene cele BC=#1300.
+Chybny XOR checksum nyni po hlaseni konci RST 0: zadne mazani/spusteni.
+BS-DOS predani v enter_directory/enter_tap ohranicene IFDEF bs_dos.
+BSDOS i ESXDOS sestaveni aktualizovana: 0 chyb, 0 varovani, symboly/listingy
+a projektove vystupy obnoveny; SARA_LOADER.tap obsahuje i celou banku 6.
+Nova tests/tap_handoff.test.js: 1063 kontrol baleni, realneho kopirovani,
+predani na #4000, zachyceni volby mazani, prepnuti banky az po kopii,
+predani loaderu na #5B00 a mezi sektorovych cteni. ROM/disk/paging simulovany.
+Regrese 89a: 408 pripadu/2474 kontrol; download_return: 26 kontrol.
+Node neni v PATH; JS testy vykonany dostupnym V8 runtime s timtez CPU modelem
+a nacitenymi skutecnymi sestavenymi daty. Test handoff lze spustit take Node
+s cestou k build slozce obsahujici bsd.sym a SARA_LOADER.tap.
+STALE NEOVERENO: skutecne BS-DOS diskove operace, Wi-Fi prenos a start hry
+pres ROM v emulatoru/na stroji. Dalsi krok je tento integracni test.
+
+Kontrola cele cesty po uprave mazani: NYNI NEPOUZIVAT VYSLEDNY BUILD.
+Kontrolni preklady do TEMP (projektove binarky neprepsany): BSDOS 0 chyb,
+2 varovani, ESXDOS 1 chyba (work_tap neni pod IFDEF bs_dos).
+Symboly BSDOS: tapmaster_start=#C437, tapmaster_len=#8800 (chybna delka!),
+program_page_end=#4C37 a program_page_len=-#73C9, nikoli nula.
+Podminka program_page_len>0 proto vynecha baleni banky 6.
+Work_tap by kopiroval #8800 B na #4000 a prepsal i hlavni kod a fnum.
+Vnoreny DISP #5B00 assembler ignoruje: stpb=#431D, SLAVE=#4380,
+nret=#4351, rstpe=#4387, ackoli se loader kopiruje na #5B00.
+Nejprve opravit oddelene relokacni bloky #4000 a #5B00 a obnovu fyzicke
+pozice banky 6; pak znovu preklad a overeni velikosti/kopirovani/loaderu.
+Kontrola neprovedla nove upravy ASM. Beh na emulatoru/hardwaru neoveren.
+
+Posledni uprava Codexem: TAPmaster START zachyti flag2 bit 5 do del_tap+1
+pred dalsimi volanimi a zmenami IX. del_tap nyni pri nule preskoci mazani,
+pri #20 maze input_file. Odstranen stary test bitu 1 a neurceneho A.
+V hlavnim ASM zdokumentovany bity 5 (mazani) a 6 (rezervovany navrat).
+Kontrolni BSDOS preklad sjasmplus 1.20.3 s vystupy do TEMP: 0 chyb, 2 varovani:
+vnoreny DISP v tapmaster.asm a preteceni ORG v 2nd_program_bank.asm.
+Sestaveni hlasi program_page_len=0 a nevytvori uplnou dvoubankovou TAP.
+Pred testem opravit relokaci DISP/ENT/ORG. Funkcnost mazani na stroji ani
+emulatoru neoverena; checksum chyba nadale jen hlasi a pokracuje.
+Projektove binarni vystupy nebyly timto kontrolnim prekladem prepsany.
+
+Uzivatel implementuje ASM sam, Codex kontroluje a navrhuje kod v chatu.
+Aktualne uz je zapojeno get_extension a item_extension na IX+41,
+ftp_download_file_under_cursor a enter_tap s predanim do work_tap v bance 6.
+Novy tapmaster.asm se kopiruje na #4000; vstupni cislo bere z fnum.
+Zatim se implementuje natvrdo rozbaleni a spusteni, menu prijde pozdeji.
+Kontrola zdroje nasla volne sousedni bity flag2 (IX+3): 5 a 6
+(take 7 je volny). Navrh: bit 5=1 smazat puvodni TAP po uspesnem rozbaleni,
+bit 6=1 zustat v Sare, 0 spustit rozbaleny program. Zatim pouze navrh,
+ASM deklarace ani TAPmaster nebyly Codexem upraveny. Stary test bitu 1
+v TAPmasteru koliduje s dokumentovanym AP CUR/DEF a musi byt nahrazen.
+Setrvani v Sare zatim neni funkcni: TAPmaster meni SP a prepise banku 6;
+navrat bude vyzadovat dalsi upravy. Posledni zmeny nebyly prelozeny/testovany.
+Nize starsi domluva, aktualni stav vyse ma prednost.
+
+Uzivatel chce pokracovat implementaci spousteni TAP souboru. Potvrzeny postup:
+ENTER na polozce zjisti priponu; TAP se vzdy nejprve ulozi a rozbali.
+Dve nezavisle volby musi byt trvale dostupne jako prepinace v menu:
+spustit po rozbaleni ano/ne a smazat puvodni TAP po rozbaleni ano/ne.
+Uzivatel vyslovne nechce dialog pri kazdem stazeni TAP. ENTER pouzije aktualni
+nastaveni menu bez dalsiho dotazu. Konkretni klavesy, vychozi hodnoty,
+trvale ulozeni nastaveni a mechanismus rozbaleni/spusteni zatim nejsou
+potvrzeny. Dalsi krok: navrhnout zacleneni prepinacu do existujiciho menu
+a proverit rozbaleni/predani BS-DOSu pred implementaci.
+Nezaměnovat sara_tap.asm (baleni samotne Sary) za spousteni vybrane TAPky.
+
+Dolozeny stav: 89a/get_extension je ve zdroji za 89), zatim bez volajicich.
+ENTER obsluhuje enter_directory, ktere dosud rozlisuje adresare a obrazky
+podle velikosti. Nova funkce spousteni TAP zatim nebyla pridana.
+Existujici necommitnute zmeny vcetne 89a zachovat; v teto etape nebyl menen
+assembler ani provaden novy preklad nebo test.
+
+Domluva k navaznosti: Codex prubezne uklada stav a dalsi kroky sem; uzivatel
+oznami zavreni VS Code, aby mohl vzniknout zaverecny checkpoint. AGENTS.md
+uklada pri dalsim zahajeni tento stav precist. Historii chatu to nenahrazuje.
+
+## Rutina 89a get_extension
+
+Pridana samostatna rutina za 89), bez zmeny puvodniho get_item_name nebo
+jeho volajicich. Vstup HL=platny nazev, BC=16bitova delka, item_name_page=banka
+(vystup 89). A vraci TAP=0, Z80=1, SNA=2, TZX=3, SCR=4, TRD=5, SCL=6,
+TXT=7, POK=8, AY=9, ostatni/chybejici/prazdna pripona=10. ASCII case insensitive.
+Zachovava BC/DE/HL, IX/IY, alternativni registry, mapovani banky i fdp_pointer.
+Jde pouze o priponu nazvu; typ soubor/adresar musi volajici vyhodnotit z 89).
+
+Proti c2d9dbc +165 B v hlavnim kodu: kod 135 B, tabulka 30 B, bez noveho
+pracovniho bufferu. bios_start #A501, volno pred #BFE0 6335 B. Banka 6 stale
+1066 B, SARA_LOADER.tap stale 25841 B. Symboly get_extension_code_len a
+get_extension_len vyjadruji presnou velikost kodu a celeho bloku.
+
+BSDOS/HGFX/ESXDOS preklady bez chyb/varovani; nova sada 408 pripadu a 2474
+kontrol pro kazdou variantu, vcetne skutecneho volani puvodniho 89), vsech
+hranic bank, jmen nad 255 B a az 65530 B, chybejicich a ruzne dlouhych pripon,
+obnovy libovolne puvodni banky a ochrany dat. Hlavni BSDOS regrese celkem 15906
+kontrol. Rutina zatim neni zapojena do uzivatelske funkce. Bez noveho commitu.
+Podrobnosti viz tests/extension-audit.md. Nize je stav pred jejim pridanim.
+
 ## Aktualni oprava INPUT: soubeh dvou klaves nerusi editaci
 
 Proti a6958e3 +14 B v hlavnim kodu, bios_start #A45C. Volno pred #BFE0

@@ -461,6 +461,7 @@ download_length	equ #800
 line_length	equ #40		;length of line (for standart ZX=#40, for hires= different)
 ftp_dir_start	equ #C000
 loa_buf_end	equ 0
+dir_list_start equ basic_end-128
 
 	IFDEF hgfx64x24
 ;HGFX pro zapis FDMA
@@ -637,6 +638,8 @@ s_ldir		ld	(wifi_type),a
 ;bit 2=we use mb wifi or not? 0=no, 1=yes
 ;bit 3=window for AP list or speed list? (1=AP list, 0= speed list)
 ;bit 4=session ID,0=ID 0, 1=ID 1
+;bit 5=delete original TAP after extraction, 0=keep, 1=delete
+;bit 6=stay in Sarah after extraction, 0=run, 1=stay (reserved, not implemented)
 						
 
 st1
@@ -1505,7 +1508,44 @@ ftp_quit_connection
 		jp	get_status_ftp
 ;		jp	error_handler1		;back to error_handler_loop
 
-		
+
+
+; Stahne pouze soubor pod kurzorem.
+; IN:  IX = flag1, aktualni polozka je soubor.
+; OUT: A = transfer_flag:
+;          0 uspech, 1 preruseni, 2 chyba/neprovedeno
+;      Z = uspech, NZ = neuspech.
+; Nektere chyby odchazeji do spolecneho error handleru.
+
+ftp_download_file_under_cursor
+        ld      a,2
+        ld      (transfer_flag),a
+
+        bit     5,(ix+0)
+        jr      z,.result       ; bez pripojeni nestahovat
+
+        call    save_dir_position_snapshot
+        call    send_type_command_i
+        call    fdfd1           ; download polozky pod kurzorem
+
+        call    set_3_5mhz
+        call    passive_receive_off
+        call    print_transfer_status
+
+        bit     0,(ix+1)
+        jr      z,.reload_dir
+
+        res     6,(ix+1)
+        call    dir_move5       ; obnova ulozene pozice a obrazu
+        jr      .result
+
+.reload_dir
+        call    directory_retrieve
+
+.result
+        ld      a,(transfer_flag)
+        or      a
+        ret		
 
 ; --- DOKUMENTACE CZ: ftp_download_file_var ---
 ; Ucel: Spustí download výchozího, zadaného nebo vybraného/označeného souboru.
@@ -3838,6 +3878,8 @@ enter_directory	;and	a
 		scf
 		call	get_item_name
 		push	af			;preserve item type across bank-safe name copy
+		call	get_extension
+		ld	(ix+41),a		;save extension for later use
 		ld	de,INPBUFF
 		call	DIR128_COPY_NAME_TO_DE
 		xor	a
@@ -3849,7 +3891,11 @@ enter_directory	;and	a
 		cp	4
 		jr	z,go_updir1		;Z=item is ".."		
 						;if A=2, item is NLST mode and could be file or dir
-
+		ld	a,(ix+41)
+		IFDEF bs_dos
+		cp  3				;0=TAP, 1=Z80, 2=SNA
+		jp 	c,enter_tap		;spolecny vstup pro TAP a SNA
+		ENDIF
 
 		ld	a,1
 		ld	hl,ftp_size
@@ -3944,7 +3990,33 @@ ed4_read
 		call	undraw_cursor
 		jp	directory_retrieve
 
+;tady budeme odchytavat typy souboru, ktere chceme pri stisku enteru zpracovat, kdyz na nich stoji kurzor
+;A=0, je to TAP, jdeme ji zpracovat
+        IFDEF bs_dos
+enter_tap	
+enter_snap	call 	ftp_download_file_under_cursor
+			ret		nz		; chyba/preruseni: nepokracovat
 
+			ld      a,(PAGE128_STATE)	;ulozime stranku, pro pripad chyby a potreby navratu
+        	push    af
+
+			ld		a,program_page
+			call	PAGE128
+
+			ld	a,(ix+41)		;A=extension
+			or	a
+			jp	z,work_tap		;skok na rozbaleni a spusteni TAPky
+			jp	work_snap		;A=1 Z80, 2=SNA- nahravame snapy
+
+snap_not_found
+			ld	a,#40
+			out	(23),a			
+			pop     af
+            call    PAGE128
+            xor     a
+            ret
+
+        ENDIF
 
 
 
@@ -9174,6 +9246,109 @@ gfn_skip_nonspaces_more:
 gfn_digit db 0
 
 
+;89a) Classify a valid name returned by get_item_name, without changing 89).
+; IN: HL=name, BC=16-bit byte length, item_name_page=name's page-table pointer.
+; OUT A: 0 TAP, 1 Z80, 2 SNA, 3 TZX, 4 SCR, 5 TRD, 6 SCL, 7 TXT, 8 POK,
+;        9 AY, 10 others (including missing, empty or unsupported extensions).
+; Preserves BC/DE/HL, IX/IY, alternate registers, original mapping/fdp_pointer.
+; ASCII case insensitive; only an exact final .xxx or .ay suffix matches.
+; Does not identify files versus directories: caller checks the result of 89).
+get_extension:
+        push    hl
+        push    bc
+        push    de
+        ld      a,(PAGE128_STATE)
+        push    af
+        ld      de,(fdp_pointer)
+        push    de
+        ld      de,(item_name_page)
+        call    DIR128_MAP_DE
+.scan:
+        ld      a,b
+        or      a
+        jr      nz,.advance
+        ld      a,c
+        cp      5
+        jr      nc,.advance
+        cp      3
+        jr      c,.other
+        ld      a,(hl)
+        cp      "."
+        jr      z,.suffix
+.advance:
+        call    DIR128_INC_HL
+        jr      c,.other
+.advanced:
+        dec     bc
+        jr      .scan
+.suffix:
+        call    DIR128_INC_HL
+        jr      c,.other
+        ld      a,(hl)
+        cp      "."
+        jr      z,.advanced            ; e.g. name..AY: use the final dot
+        call    convert
+        ld      d,a
+        call    DIR128_INC_HL
+        jr      c,.other
+        ld      a,(hl)
+        call    convert
+        ld      e,a
+        ld      a,c                    ; remaining length includes dot: 3 or 4
+        ld      c,0                    ; AY is padded with zero in the table
+        cp      3
+        jr      z,.compare
+        call    DIR128_INC_HL
+        jr      c,.other
+        ld      a,(hl)
+        call    convert
+        or      a
+        jr      z,.other               ; a third NUL byte is not the two-byte AY suffix
+        ld      c,a
+.compare:
+        ld      hl,get_extension_types
+        ld      b,10
+.entry:
+        ld      a,(hl)
+        inc     hl
+        cp      d
+        jr      nz,.skip2
+        ld      a,(hl)
+        inc     hl
+        cp      e
+        jr      nz,.skip1
+        ld      a,(hl)
+        inc     hl
+        cp      c
+        jr      z,.found
+.next:
+        djnz    .entry
+.other:
+        ld      b,0
+.found:
+        ld      a,10
+        sub     b
+.done:
+        ld      c,a
+        pop     de
+        ld      (fdp_pointer),de
+        pop     af
+        call    PAGE128
+        ld      a,c
+        pop     de
+        pop     bc
+        pop     hl
+        ret
+.skip2:
+        inc     hl
+.skip1:
+        inc     hl
+        jr      .next
+get_extension_code_len equ $-get_extension
+get_extension_types: db "tapz80snatzxscrtrdscltxtpok", "ay",0
+get_extension_len equ $-get_extension
+
+
 ;90)
 ; --- DOKUMENTACE CZ: print_dir_files_items ---
 ; Ucel: Vypíše počet adresářů/souborů nebo celkový počet položek NLST.
@@ -9783,6 +9958,8 @@ flag_dir	db 0		;IX+1, flag related to dir
 				;bit 7= are we testing first item "Total XY"?, 0=no, 1=yes
 ud_speed	db 16		;IX+2,we want speed 16 for now (it is max speed)
 flag2		db 0		;IX+3, print send command,0=NO, 1=YES
+						;bit 5 = smazat puvodni TAP po uspesnem rozbaleni: 0=NE, 1=ANO
+						;bit 6 = zustat v Sare po rozbaleni:               0=spustit, 1=zustat
 		db #20		;IX+4, free for use (maximum number of raw data reread, see "rece_loop")
 		db 0		;reserved, free for use
 		db #55		;IX+6, timeout for initi wifi speed management (used on more places)
@@ -9809,13 +9986,13 @@ cur_item_addr	dw #5555	;;;;;ix+25, current address/pointer to dir item
 cur_lin_prn_adr	dw #5555	;;;;;ix+27, current addres for line/item print
 ;ftp_path_pointr	dw #5555	;ix+28, points to current dir in the ftp dir path, asi netøeba
 item_file_count	dw #5555	;ix+29, item (for NLST)/ file (for LIST) counter (IY will count files/ items)
-mark_counter	dw #5555	;ix+30, counts marked files
-dir_counter	dw #5555	;IX+32
-item_counter	dw #5555	;IX+34, counts items in the directory view (files+dirs)
+mark_counter	dw #5555	;ix+31, counts marked files
+dir_counter	dw #5555	;IX+33
+item_counter	dw #5555	;IX+35, counts items in the directory view (files+dirs)
 dir_restore_item dw 0
 dir_restore_row db 1
 dir_list_pointer dw dir_list_start
-dir_list_start equ basic_end-128
+item_extension	db #55	 ;IX+41, extension of the item under cursor
 ;end of flags
 
 ;core		db #55,#55,#55	
