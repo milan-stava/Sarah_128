@@ -55,9 +55,10 @@ for (const flags of [0, 0x20, 0x40, 0x60, 0xdf, 0xff]) {
  try { cpu.call(S.work_tap); throw Error('handoff did not reach START'); } catch (e) { if (e !== stop) throw e; }
 }
 {
- let cpu;
+ let cpu, normalSpeed = 0;
  cpu = makeCpu([], new Uint8Array(), S, {image, hook(pc, r) {
-  if (pc === 0x3c98) return {ret: true};
+  if (pc === S.set_3_5mhz) { normalSpeed++; return {ret: true}; }
+  if (pc === 0x3c98) { assert(normalSpeed === 1, '3.5 MHz before ROM/loader handoff'); return {ret: true}; }
   if (pc === S.stpb) {
    const n = S.move_len1 + S.move_len2;
    assert(Buffer.from(r.m.slice(0x5b00, 0x5b00 + n)).equals(Buffer.from(r.m.slice(S.odkud, S.odkud + n))), 'actual loader copy and jump to #5B00');
@@ -71,5 +72,25 @@ for (const flags of [0, 0x20, 0x40, 0x60, 0xdf, 0xff]) {
 for (let offset = 0; offset < 1024; offset++) {
  const start = S.seq_buff - offset, bytes = Math.ceil((S.seq_buf_len + offset) / 1024) * 1024;
  assert(start >= 0xc000 && start + bytes <= 0x10000, 'sector read stays in bank');
+}
+// A checksum mismatch is advisory: report it and return to extraction.
+for (const parity of [0x23, 0x24]) {
+ let reports = 0;
+ const cpu = makeCpu([], new Uint8Array(), S, {image, hook(pc, r) {
+  if (pc === S.load_block_no_save_len_in_HL) {
+   assert(r.hl === 1, 'CRC reads one parity byte');
+   r.m[S.seq_buff] = parity;
+   return {ret: true};
+  }
+  if (pc === S.bsdos_tm) {
+   assert(r.a === 0x34 && r.hl === S.xor_err, 'checksum warning service');
+   reports++;
+   return {ret: true};
+  }
+ }});
+ cpu.m.set(source, 0x4000); cpu.m[S.xor_start + 1] = 0x23;
+ cpu.call(S.evaluate_crc); // must return with a balanced stack, including mismatch
+ assert(reports === (parity === 0x23 ? 0 : 1), 'warning only on CRC mismatch');
+ assert(cpu.m[S.xor_yes_no] === 1, 'CRC checking remains enabled for next block');
 }
 console.log({checks, tapmasterBytes: S.tapmaster_len, bank6Bytes: bank6.length});

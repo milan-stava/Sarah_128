@@ -733,6 +733,8 @@ key_loop	call	KEYSCAN
 	IFDEF bs_dos
         cp      "g"
         call    z,cfg_choose_profile
+        cp      "k"
+        call    z,help_show
 	ENDIF
 		cp	"u"
 		call	z,ftp_upload_file
@@ -810,7 +812,8 @@ kl2		call	z,ftp_login
 		call	z,unmark_all		;SS+M=unmark all
 		cp	"i"
 		jp	z,find_items
-;		call	z,find_items
+		cp	"z"
+		call	z,view_as_text
 
 kl11		cp	"c"
 		call	z,enter_command
@@ -871,12 +874,30 @@ cfg_choose_profile:
         ld      a,program_page
         call    PAGE128
         call    cfg_browser
+        ld      b,a             ; retain confirmation across page/UI restoration
         pop     af
         call    PAGE128
+        push    bc
         ; cfg_browser returns with IX=flag1.
         call    clear_edit_zone
         bit     0,(ix+1)
         call    nz,dir_move4
+        pop     af
+        or      a
+        call    nz,auto_login   ; exactly the SS+L action, only after ENTER
+        xor     a
+        ret
+
+help_show:
+        ld      a,(PAGE128_STATE)
+        push    af
+        ld      a,program_page
+        call    PAGE128
+        call    help_bank
+        pop     af
+        call    PAGE128
+        bit     0,(ix+1)
+        call    nz,resume_directory_screen.cached
         xor     a
         ret
 	ENDIF
@@ -3891,11 +3912,17 @@ enter_directory	;and	a
 		cp	4
 		jr	z,go_updir1		;Z=item is ".."		
 						;if A=2, item is NLST mode and could be file or dir
+
+;tady rozhodujeme, pokud je soubor po kurzorem TAPka, snap, TXT, POK, atd....
 		ld	a,(ix+41)
 		IFDEF bs_dos
 		cp  3				;0=TAP, 1=Z80, 2=SNA
 		jp 	c,enter_tap		;spolecny vstup pro TAP a SNA
 		ENDIF
+		cp	7
+		jp  z,view_as_text.ready	;7=TXT, TYPE I already sent
+		cp	8
+		jp  z,view_as_text.ready	;8=POK, TYPE I already sent
 
 		ld	a,1
 		ld	hl,ftp_size
@@ -4018,6 +4045,7 @@ snap_not_found
 
         ENDIF
 
+        INCLUDE "text_viewer_io.asm"
 
 
 ; --- DOKUMENTACE CZ: key_down ---
@@ -9617,6 +9645,7 @@ dir_cache_sum dw 0
 ;Redraw cached view without consuming history or changing cursor position.
 resume_directory_screen
         call print_working_directory
+.cached                         ; redraw without FTP, also usable by local help
         call print_dir_files_items
         ld de,menu_dir
         ld hl,txt_adr_dir_info+22
@@ -9799,9 +9828,11 @@ speed		db "Speed:",0
 module_no_aswer	db "..speed aligned, but no answer from module..",0
 spaces		db "                                ",0
 
-menu_dir	db "I-Fn Spc ZX R-Rr 6-Rn 7-MD Del Br-UD ss+/N",0
+menu_dir	db "I-F Sp ZX R-R 6-Rn 7-MD Del Br-U ssN Z-Txt",0
+menu_dir_len equ $-menu_dir-1
+        ASSERT menu_dir_len <= 64-22
 	IFDEF bs_dos
-menu1		db "F-file T-start A-YES H-host E-usr P-pass U-up S-size Q-end G-CFG",0
+menu1		db "F-file T-start A-YES H-host E-usr P-pw U-up S-sz Q-q G-CFG K-Hlp",0
 	ELSE
 menu1		db "F-file T-start A-YES H-host E-usr ss+/P-pass U-upl S-size Q-quit",0
 	ENDIF
@@ -10091,16 +10122,15 @@ program_page	equ	6		;zde budou PRINT, INPUT......
 
 ;total_len	equ $-code_
 total_len	equ $-start_ldir
-        IFDEF bs_dos
         SLOT 3
         PAGE program_page
         ORG #C000
 program_page_start:
+        IFDEF bs_dos
         INCLUDE "2nd_program_bank.asm"
+        ELSE
+        INCLUDE "text_viewer_bank.asm"
+        ENDIF
 program_page_end:
 program_page_len equ program_page_end-program_page_start
         PAGE 0
-        ELSE
-program_page_start equ #C000
-program_page_len equ 0
-        ENDIF

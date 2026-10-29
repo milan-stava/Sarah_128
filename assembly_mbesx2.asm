@@ -6,5 +6,8 @@
 	INCLUDE "sarah_ftp_client.asm"
 	EMPTYTAP "SARAH12ESX.tap"
 	SAVETAP "SARAH12ESX.tap",CODE,"SAR12ESX",start_address,total_len
+        DEFINE SARA_TAP_FILE "SARA_ESX_LOADER.tap"
+        INCLUDE "sara_tap.asm"
+        UNDEFINE SARA_TAP_FILE
 	ENDMODULE
 ;	UNDEFINE mb03

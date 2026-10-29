@@ -30,6 +30,7 @@ cfg_read_file:
         sbc     hl,de
         jr      nc,.bad
 
+.load_body:                     ; help reuses the read without CFG length checks
 	ld	ix,cfg_file_here
 	push	ix
 	call	load_file+4		;nahraj cfg soubor
@@ -295,6 +296,8 @@ cfg_profile_name:   ds 32
 ; is allocated. Every preview starts from that snapshot (empty File/Start
 ; therefore keep the settings from entry, not those of another preview).
 cfg_browser:
+        xor     a
+        ld      (cfg_accepted),a
         ld      hl,var_name
         ld      de,INPBUFF
         ld      bc,cfg_settings_len
@@ -326,8 +329,9 @@ cfg_browser:
         jr      nz,.move
         ld      a,(cfg_valid)
         or      a
-        jr      nz,cfg_close
-        jr      .keys
+        jr      z,.keys
+        ld      (cfg_accepted),a
+        jr      cfg_close
 .move:
         ld      hl,cfg_selected
         ld      b,(hl)
@@ -385,7 +389,10 @@ cfg_close:
         call    cfg_clear_window
         ld      hl,txt_adr_mezera
         ld      de,spaces
-        jp      PRINTHL
+        call    PRINTHL
+        ld      a,(cfg_accepted) ; 1=ENTER confirmed, 0=cancel/missing
+        ret
+cfg_accepted db 0
 
 ; Find Name= lines directly in the CFG; no duplicate directory/index table.
 ; OUT: HL=Name line, DE=name value, BC=value length, C=EOF.
@@ -664,11 +671,26 @@ tapmaster_len	equ	$-tapmaster
 work_snap       ld	a,#63			;now jump into bsdos nmi menu and run snap
 		out	(23),a
 
-		or	a
-		ld	de,#B536		;text "65" (last digit inverted)
-		ld	hl,(#26D2)		;navesti VER v nmi menu
-		sbc	hl,de
-		jr	nz,slb			;NZ=nmi menu 1.64 not found
+        ; VER contains ASCII minor-version digits; bit 7 marks inverse text.
+        ld      a,(#26D2)
+        and     #7F
+        sub     "0"
+        cp      10
+        jr      nc,slb
+        ld      b,a
+        add     a,a
+        add     a,a
+        add     a,b
+        add     a,a             ; tens * 10
+        ld      b,a
+        ld      a,(#26D3)
+        and     #7F
+        sub     "0"
+        cp      10
+        jr      nc,slb
+        add     a,b
+        cp      65
+        jr      c,slb           ; accept 1.65..1.99, including 1.67
 
 		ld	hl,(fnum)
 		ld	(#5aa0),hl		;file number
@@ -683,6 +705,32 @@ slb		ld	hl,txt_adr_edit_zone2
                 jp      snap_not_found
 
 nmi_not_found_txt db "Unsupported NMI menu",0
+
+; Local help shares CFG's disk reader and free bank-6 workspace.
+; The distributed sara.hlp is assumed to fit, as requested by the user.
+help_bank:
+        ld      hl,help_name
+        call    file_exist+3
+        jr      nz,.missing
+        call    load_init
+        call    cfg_read_file.load_body
+        ld      ix,flag1
+        ld      (text_local_base),hl
+        ld      (text_length),bc
+        call    text_browse
+        jr      .restore_ui
+.missing ld     ix,flag1
+        ld      hl,txt_adr_edit_zone2
+        ld      de,help_missing
+        call    pts
+.restore_ui
+        call    cls_4000
+        call    print_screen_layout
+        jp      print_title     ; directory is redrawn from fixed RAM after return
+help_name db "sara.hlp  "
+help_missing db "sara.hlp not found",0
+
+        INCLUDE "text_viewer_bank.asm"
 
 cfg_file_here:
 cfg_capacity equ #FFFF-cfg_file_here  ; last byte reserved for zero terminator

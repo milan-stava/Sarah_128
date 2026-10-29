@@ -1,5 +1,196 @@
 # Predtestovy checkpoint Wi-Fi — 22. 10. 2026
 
+## POTVRZENO UZIVATELEM A PRIPRAVENO KE COMMITU — 29. 10. 2026
+
+Uzivatel vyslovne potvrdil obe posledni funkce: K nacita a zobrazuje mistni
+sara.hlp a G -> ENTER provadi pripojeni akci SS+L. Drive potvrdil funkcni
+TXT, prijatelnou rychlost po cache optimalizaci a uspesne spusteni TAP.
+Skutecny start snapshotu s NMI 1.67 zustava bez vyslovneho potvrzeni.
+Potvrzeni funkci samo o sobe neznamena overeni vseho na realnem hardwaru;
+realne Wi-Fi casovani a odlozeny upload maji stale drivejsi omezeni.
+
+Na aktualni pokyn se dnesni zdroje, testy, audity, sara.hlp a sestavene
+BSDOS/ESXDOS artefakty commituji a pushuji na origin/fix-ftp-directory,
+https://github.com/milan-stava/Sarah_128.git. Posledni preklady jsou
+bez chyb a varovani, HGFX je vypnute. Presny commit a vysledek pushe
+overit v historii Gitu/posledni zprave; starsi zminky 'bez commitu' nize
+jsou historicke. Dalsi prace podle novych testu/pozadavku uzivatele;
+neopakovat uz potvrzene implementace.
+
+## AKTUALNI: lokalni sara.hlp a SS+L po potvrzeni profilu
+
+Uzivatel potvrdil zrychleni prohlizece jako snesitelne rychle. Dale zadal
+mistni napovedu podobne CFG, vse pokud mozno do banky 6; VYSLOVNE nechce
+pridavat kontroly delky help souboru a urcil nazev sara.hlp (ne sara.txt).
+SARA_HELP.TXT proto prejmenovan na sara.hlp, distribuovat vedle sara.cfg.
+
+Hotovo pro BSDOS: K-Hlp funguje nezavisle na FTP/adresari. Pomoci existujiciho
+file_exist/load_init a cfg_read_file.load_body se soubor nacte do cfg_file_here
+v bance 6 bez novych kontrol delky. Sdileny prohlizec ma text_local_base;
+lokalni text cte primo z banky 6, bez datove cache/prepinani bank. FTP vstup
+vzdy resetuje lokalni zdroj, aby dalsi TXT/POK/Z cetlo spravna data.
+Pri chybejici napovede hlaska, pak normalni navrat. Help obnovuje rozlozeni
+a cachovany adresar bez jakehokoli FTP prikazu i offline. Aktualni FTP cesta
+se nevyzaduje pres PWD, misto ni se obnovi nadpis Sary.
+Menu ma K-Hlp pri zachovani ostatnich klaves, zkraceno P-pw/S-sz/Q-q.
+Napoveda 2220 B, aktualni volna oblast banky 6 zacina #CB3A.
+
+Dalsi potvrzeny pozadavek: po ENTER ve vyberu CFG provest akci SS+L.
+Cfg_browser vraci cfg_accepted: 1 jen pro platny ENTER, 0 pro BREAK/missing.
+Pevny cfg_choose_profile zachova vysledek pres obnovu banky/UI a pak
+CALL NZ,auto_login. Tim se zachovava cele puvodni chovani SS+L vcetne
+pripadneho dotazu pri spojeni na jiny server. BREAK nepripojuje.
+Vysledna klavesa je spotrebovana, navrat A=0, zasobnik vyvazeny.
+
+Naklad pod #C000: help +30 B vcetne K dispatch/trampoliny, profil SS+L +7 B.
+Posledni bios_start #A65F, konec BIOSu #A87F, volno pred #BFE0=5985 B.
+Cela banka 6 2874 B; spolecny textovy prohlizec v ni 642 B.
+Oproti zacatku dnesni implementace textu je nyni hlavni kod celkem +235 B.
+BSDOS/ESXDOS binarky/TAP/symboly/listingy obnoveny: 0 chyb/varovani.
+HGFX zustava vypnute.
+
+Testy: lokalni help45 kontrol vcetne offline a skutecnych volani diskoveho
+loaderu s modelovanym diskem; cfg_profiles10217, cfg_exit164 (ENTER vola
+SS+L jednou, BREAK/missing ne); ostatni BSDOS regrese5564. Textovy prohlizec
+336684 kontrol pro BSDOS i ESXDOS, vcetne navratu z lokalniho zdroje na FTP.
+Viz tests/local-help-audit.md a tests/text-viewer-audit.md.
+Dalsi krok: uzivatel testuje novou SARA_LOADER.tap + mistni sara.hlp (K),
+a G/ENTER pripojeni. Fyzicke diskove cteni napovedy a tento novy loginflow
+zatim bez uzivatelskeho potvrzeni. Dnesni zmeny stale bez commitu/pushe.
+
+## Posledni zmena: rychlejsi Page Up; TAP start potvrzen uzivatelem
+
+Uzivatel potvrdil TXT funkcni, Page Up ale trval asi sekundu; pozadal
+o zrychleni. Behem prace take potvrdil, ze TAP uz se spustila.
+Snapshot/NMI start 1.67 zatim v teto casti znovu nepotvrzen.
+
+Novy text_fill nahradil pevny text_byte: nacita zarovnanych 256 B do
+existujiciho INPBUFF, ktery po FTP uz nepotrebujeme pro nazev. Dalsi
+buffer RAM nepridan; text_get ma 2B tag v bance 6 a cte cache. Pri novem
+otevreni souboru se cache zneplatni. Podporuje CRLF/hranice bank/EOF.
+Kresleni a zpetny scan bezi na 20 MHz, pred KEYSCAN zpet 3.5 MHz.
+Historie stranek stale neni. HGFX se nezapinal.
+
+Mereni sestaveneho Z80 kodu modelem, Page Up u konce 65535B textu:
+drive 129108 prepnuti bank/4202370 instrukci, nyni 506/3113303.
+Skutecne casovani na stroji nezmereno. Stress test vcetne dokresleni
+predchozi obrazovky: 520 prepnuti dlouhe radky, 512 samotne LF.
+Testy text_viewer: 336674 kontrol pro BSDOS i ESXDOS, vcetne cache,
+zmeny souboru, CPU rychlosti a navigace pres 2700+ obrazovek.
+Dalsich 15903 dosavadnich BSDOS regresnich kontrol proslo.
+Obe projektove sestavy/TAP/symboly/listingy obnoveny: 0 chyb/varovani.
+Pod #C000 za zrychleni +5 B: pevne mosty 195 B, celkovy prirustek
+prohlizece proti zacatku implementace 198 B, bios_start #A63A,
+volno pred #BFE0 6022 B. Bankovy prohlizec 620 B, cela banka 6 2759 B.
+Dalsi krok: uzivatelsky test rychlosti Page Up v SARA_LOADER.tap.
+Dnesni zmeny stale bez commitu/pushe, vcerejsi zaloha je 7818893.
+
+## Posledni oprava z testu TXT: TYPE I prepisoval nazev pred SIZE
+
+Uzivatel hlasil 2x 200 switching to binary a pak 550 could not get file size.
+Pricina prokazana regresnim testem: send_type_command_i vola clear_inp_buf
+a zapisuje "I" do INPBUFF, takze pri volani z text_viewer_control uz zrusil
+pripraveny nazev. Server dostaval SIZE I (buffer nasledne trimovan prikazem).
+Oprava: Z vstup view_as_text posila TYPE I PRED ziskanim/kopii nazvu;
+ENTER TXT/POK jde na view_as_text.ready, protoze enter_directory uz TYPE I
+poslal. V bankove text_viewer_control uz TYPE I neni. Kazdy vstup tak
+posila TYPE jen jednou a SIZE dostane puvodni jmeno.
+Novy regresni test pousti skutecnou rutinu TYPE (vcetne clear_inp_buf)
+a zachytava nazev pri SIZE pro ENTER i Z. Pred opravou test selhal,
+po oprave proslo 333876 kontrol pro BSDOS i ESXDOS (drivejsi dve dlouhe
+navigacni stress smycky nebyly opakovany, ostatni sada ano).
+BSDOS a ESXDOS projektove TAP/bin/symboly/listingy obnoveny bez chyb/varovani.
+Pod #C000 +3 B za opravu: nyni celkem +193 B proti zacatku implementace,
+bios_start=#A635, konec BIOSu=#A855, volno pred #BFE0=6027 B.
+HGFX zustava vypnute. Dalsi krok: znovu testovat ENTER na TXT/POK a Z na CFG.
+
+## Posledni opravy: NMI >=1.65 a rychlost extrakce TAP
+
+Uzivatel testuje NMI 1.67; puvodni kontrola vyzadovala presne slovo #B536
+(text 65 s inverznim poslednim znakem), proto 67 odmitla.
+Work_snap nyni u obou cislic VER na #26D2/#26D3 odmaskuje bit 7,
+overi ASCII cislice, spocita desitky*10+jednotky a prijme hodnotu >=65.
+Podporovany rozsah teto dvouciselne kontroly je 1.65..1.99, ne obecne major2.
+Vstupni adresy do NMI zustaly podle uzivatelova kodu #5AA0/#57E2/#11DD.
+Nova tests/snapshot_entry.test.js: 214 pripadu, 712 kontrol (00..99,
+normalni/inverzni posledni cifra, neplatne znaky, predani cisla a SP).
+
+TAPmaster START jiz nastavoval 20 MHz. Na zadost uzivatele explicitne
+pridan CALL set_3_5mhz do run1 pred predanim do ROM/loaderu. Nret navic
+ponechava sve drivejsi nastaveni 3.5 MHz. Checksum varovani stale pokracuje.
+Test tap_handoff nyni 1071 kontrol vcetne 20MHz startu a poradi navratu na
+3.5 MHz pred ROM/loaderem. Tapmaster 977 B, banka 6 2716 B.
+Aktualni BSDOS binarky/TAP/symboly/listing obnoveny: 0 chyb a varovani.
+Hlavni kod pod #C000 beze zmeny, HGFX v beznem sestaveni vypnute.
+Dalsi krok: znovu testovat SARA_LOADER.tap na uzivatelove NMI 1.67,
+a rozbaleni TAP s checksum varovanim a naslednym startem na 3.5 MHz.
+
+## Posledni oprava po uzivatelskem testu: checksum TAP je pouze varovani
+
+Uzivatel upresnil, ze pri 'Checksum error' se MA pokracovat v extrakci.
+Predchozi Codexem vlozeny RST 0 zpusoboval odchod (na stroji do NMI menu).
+Evaluate_crc nyni po priprave hlasky konci JP bsdos_tm: zprava a navrat
+volajicimu, bez resetu; dale se rozbaluje a normalne spousti podle toku kodu.
+Sestaveni BSDOS vcetne SARA_LOADER.tap, binarky, symbolu/listingu obnoveno:
+0 chyb/varovani. Test tap_handoff ma nyni 1070 kontrol vcetne shodneho
+i neshodneho checksumu, navratu a vyvazeneho zasobniku. Tapmaster 974 B,
+banka 6 2691 B; prostor pod #C000 beze zmeny (prirustek vieweru stale190 B).
+HGFX se nezapina; bezna projektova TAP je klasicka ZX verze.
+Starsim tvrzenim o fatalni chybe checksumu nize predchazi tato domluva.
+
+## AKTUALNI: RAM prohlizec TXT/POK a libovolnych souboru
+
+Uzivatel autorizoval implementaci s prioritou co nejmensiho kodu pod #C000.
+Hotovo: ENTER na TXT/POK a klavesa Z pouzivaji view_as_text. V zustava save_app
+(uzivatel vyslovne opravil docasny navrh V-Txt; zadne premapovani neprobehlo).
+Menu je zkracene na 42 znaku vcetne Z-Txt, pridany ASSERT proti preteceni.
+Ovladani prohlizece: vlevo predchozi obrazovka, vpravo dalsi, BREAK navrat;
+pri odchodu ceka na uvolneni BREAK, aby se neprovedl nasledny parent dir.
+
+text_viewer_bank.asm ma vetsinu kodu a vsechen stav v bance 6 (577 B).
+text_viewer_io.asm ma mosty ve stabilni RAM (187 B): validace/kopie nazvu,
+navrat do UI, mapovani dat, cteni bajtu a blokovy prijem bez disku.
+Kazdy bajt pro scanner prepne datovou banku a zpet na 6; uzivatel to prijal.
+Prijem pouziva cele bloky, omezene hranici banky. Zadne ukladani na disk,
+buffer cele obrazovky ani historie stranek. Page Up pocita od zacatku
+stejnym pruchodem bez kresleni. CRLF/CR/LF, TAB=mezera, ostatni netisknutelne
+bajty=tecka. Aktualni ZX/HGFX rozmery jsou 64x24, HGFX bere max_chars/max_lines.
+Budouci HGFX 512x384 vyzaduje upravu celkoveho GUI; zatim se nezavadelo.
+
+Data jsou v bankach 4,0,1,3. Do #4000 vcetne zustane cely adresar zachovan;
+pred prvnim zapisem do dalsi banky se zrusi validita adresare. Po navratu
+se zachovany adresar prekresli z RAM, jinak znovu stahne. Plati i pro abort.
+Velke soubory maji varovani a limit #FFFF bajtu, pak vracejici ABOR/NOOP
+barieru (nova sdilena ftp_abort_transfer) pro korektni dokonceni protokolu.
+Stary ftp_abort_download nadale provadi sve puvodni UI a reset zasobniku.
+Mazani souboru a jinych diskovych rutin se prohlizec nedotyka.
+
+Presne mereni proti stavu uzivatelovych vstupu pred implementaci:
+bios_start #A574 -> #A632, cisty prirustek POD #C000 = 190 B.
+Konec BIOSu #A852, volno pred #BFE0 = 6030 B; cela banka 6 = 2692 B.
+Proti vcerejsimu commitu 7818893 je prirustek hlavniho kodu 205 B,
+protoze uzivatelovy dnesni vstupy uz pred implementaci pridaly 15 B.
+
+BS-DOS/ESXDOS/HGFX sestaveni 0 chyb a 0 varovani. Aktualni projektove
+BSDOS/ESXDOS binarky/TAP/listingy/symboly obnoveny, HGFX kontrola pouze TEMP.
+Pro BS-DOS testovat SARA_LOADER.tap. ESXDOS novy kod take potrebuje banku 6:
+pridan kombinovany SARA_ESX_LOADER.tap. Stary SARAH12ESX.tap je pouze hlavni
+blok a sam neni kompletnim dvoubankovym sestavenim.
+Pridan ASCII SARA_HELP.TXT vedle sara.cfg, oba distribuovat se Sarou 128.
+Nahrat TXT na FTP pro zobrazeni ENTER/Z; lokalni diskove cteni TXT neni.
+
+Testy sestaveneho kodu: tests/text_viewer.test.js 333874 kontrol pro KAZDOU
+ze tri variant, vcetne 65535 LF (>2700 obrazovek), dlouhych radku, hranic
+bank, zkraceni 702026B souboru, castecnych/prazdnych ramcu a navratu pri
+abortu/chybe. Dalsich 15903 dosavadnich BSDOS regresnich kontrol proslo.
+Testy bezi CPU modelem ve V8 (Node neni v PATH), FTP/BIOS/kresleni simulovane.
+Podrobnosti a Node prikazy viz tests/text-viewer-audit.md.
+STALE CHYBI realne Wi-Fi, emulatorovy/hardwarovy vzhled a rychlost Page Up,
+a drive odlozene skutecne spousteni TAP/snapshotu. Dalsi krok: uzivatelsky
+test nove SARA_LOADER.tap. Dnesni zmeny zatim NEcommitovany ani pushnuty.
+Vcerejsi checkpoint 7818893 je lokalne i na origin/fix-ftp-directory.
+Starsim protichudnym checkpointum nize predchazi tento aktualni stav.
+
 ## Aktualni navaznost — 29. 10. 2026: spousteni TAP
 
 ## ZAVERECNY CHECKPOINT PRED SPANIM — navazat zde

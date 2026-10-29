@@ -10,7 +10,7 @@ function cfgExitRegression(makeCpu,image,bios,S,bank6,sample) {
  const settings=m=>fields.map(n=>n==='var_start'?word(m,S[n]):str(m,S[n]));
  const config=Array.from({length:12},(_,i)=>`Name=Profile ${i}\nHost=host${i}\nPort=${21+i}\nUser=user${i}\nPass=\nFile=\nStart=\n`).join('');
  for(const exit of [13,1])for(const hasDirectory of [false,true])for(const movement of [[],Array(10).fill(10)]) {
-  let u,active=0,started=false,returned=false,idle=false,draws=0,loads=0;
+  let u,active=0,started=false,returned=false,idle=false,draws=0,loads=0,logins=0;
   const maps=[],stop={},keys=[...movement,exit];
   const banks=Array.from({length:8},()=>new Uint8Array(16384));banks[6].set(bank6);
   // Two valid abbreviated directory records plus a zero end marker.
@@ -22,6 +22,7 @@ function cfgExitRegression(makeCpu,image,bios,S,bank6,sample) {
    if([S.send_string,S.send_ftp_command,S.print_working_directory,S.get_status_ftp,S.directory_retrieve].includes(pc))throw Error('profile exit performed a network operation');
    if(pc===S.error_handler||pc===S.error_handler_loop||pc===S.quit_program)throw Error('profile exit entered error/quit handler');
    if(pc===S.PAGE128){map(r.a&7);return {ret:true,a:16+active};}
+   if(pc===S.auto_login){logins++;assert(exit===13,'BREAK must not invoke SS+L');assert(str(r.m,S.host_url)==='host'+movement.length,'selected host installed before SS+L');assert(active===(hasDirectory?0:3),'restore bank/UI before SS+L');return {ret:true,a:0x55};}
    if(pc===S.cfg_read_file){loads++;u.m.set(bytes(config+'\0'),S.cfg_file_here);return {ret:true,carry:false};}
    if(pc===S.print_page)draws++;
    if(pc===S.KEYSCAN){
@@ -44,6 +45,7 @@ function cfgExitRegression(makeCpu,image,bios,S,bank6,sample) {
   map(3);
   let caught=false;try{u.call(S.key_loop);}catch(e){if(e!==stop)throw e;caught=true;}
   assert(caught&&returned&&idle&&loads===1&&!keys.length,'G completes and reaches next idle keyboard scan');
+  assert(logins===(exit===13?1:0),'ENTER invokes SS+L; BREAK only restores settings');
   const after=settings(u.m),selected=movement.length;
   assert(exit===1?JSON.stringify(after)===JSON.stringify(original):after[0]==='host'+selected&&after[1]===String(21+selected)&&after[2]==='user'+selected,'BREAK restores all settings; ENTER keeps selected settings');
   assert(draws===(hasDirectory?1:0),'cached directory is redrawn only if valid');

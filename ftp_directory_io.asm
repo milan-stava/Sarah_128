@@ -81,6 +81,11 @@ ftp_discard_payload
 ; Download abort stays passive until the data socket has been closed. Never
 ; enter the legacy upload reader or release pending data into active UART mode.
 ftp_abort_download
+        call ftp_abort_transfer
+        jp ful_abort_done         ;legacy disk-download UI and stack unwinding
+
+; Returning ABOR/NOOP barrier, also usable by the RAM-only viewer.
+ftp_abort_transfer
         call set_3_5mhz
         ld hl,ftp_abort_wire
         call ftp_send_six
@@ -123,8 +128,7 @@ ftp_abort_download
         cp 3
         jr nz,.error              ;require final 225/226 and our NOOP marker
         call ftp_close_data
-        call passive_receive_off
-        jp ful_abort_done         ;existing display/refresh and stack unwinding
+        jp passive_receive_off
 
 ; Close channel 1 and consume its actual terminal, not a preceding UNLINK notice.
 ; A rejected close is harmless only when no data remains. Never ignore busy.

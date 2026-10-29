@@ -1,0 +1,71 @@
+SARAH 128 - KEY HELP
+===================
+
+CS = CAPS SHIFT, SS = SYMBOL SHIFT
+
+DIRECTORY
+---------
+Up / Down   Move the cursor
+Left/Right  Change directory page
+ENTER       Open directory or supported file
+BREAK       Go to parent directory
+I           Find an item
+X           Scroll a long item name
+SPACE       Mark or unmark the item
+CS+M        Mark all items
+SS+M        Unmark all items
+R           Read the directory again
+6           Rename the item
+7           Create a directory
+DELETE      Delete the item
+N           Switch LIST / NLST
+SS+N        Switch abbreviated / full listing
+Z           View any file as text
+
+TEXT VIEWER
+-----------
+Left        Previous screen
+Right       Next screen
+BREAK       Return to Sarah
+
+ENTER opens TXT and POK files in the same viewer.
+For CFG or other files, use Z.
+Viewing downloads into memory; it does not save a file.
+Non-printable bytes appear as dots. TAB is one space.
+Files over 65535 bytes are shown only up to that limit.
+A warning is displayed before downloading a large file.
+
+FTP AND SETTINGS
+----------------
+L           Log in
+SS+L        Automatic login sequence
+O           Log off
+H           Set FTP host
+E           Set user name
+P           Set password
+SS+P        Toggle password visibility
+A           Toggle automatic login
+F           Set default file name
+T           Set file start address
+S           Show file size
+U           Upload
+D           Download selected / marked files to disk
+CS+D        Download a file by entering its name
+SS+D        Download the default file
+B           Abort a running download
+C           Send an FTP command
+G           Choose a CFG profile; ENTER logs in (BS-DOS)
+K           Open local sara.hlp (BS-DOS, no FTP needed)
+W           Toggle Wi-Fi state on exit
+V           Save the application
+Q           Quit Sarah
+
+OPENING FILES (BS-DOS)
+---------------------
+ENTER on TAP downloads, extracts and starts the program.
+The original TAP is currently kept after extraction.
+ENTER on SNA / Z80 downloads and hands it to the NMI menu.
+An unsupported NMI menu shows a message and returns.
+
+Keep sara.hlp next to sara.cfg on the current BS-DOS disk.
+Press K to open it, Left/Right to browse and BREAK to return.

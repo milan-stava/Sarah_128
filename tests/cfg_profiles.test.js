@@ -9,7 +9,8 @@ function cfgProfilesRegression(makeCpu,image,bios,S,bank6,sample) {
  const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
  const profile=(name,host='host',extra='')=>'Name='+name+'\nHost='+host+'\nPort=21\nUser=user\nPass=\nFile=\nStart='+extra+'\n';
  function run(text,keys,{missing=false,trampoline=false,hasDirectory=true,dispatch=false}={}) {
-  let active=3,u,loads=0,redraws=0,pendingCursor=false,dispatchStarted=false,dispatchReturned=false,scrolls=0;const pages=[],views=[],messages=[],maps=[],cursors=[],titles=[],screens=[],nameDraws=[],tokens=new Map();
+  const confirmed=keys.at(-1)===13&&!missing;
+  let active=3,u,loads=0,redraws=0,logins=0,pendingCursor=false,dispatchStarted=false,dispatchReturned=false,scrolls=0;const pages=[],views=[],messages=[],maps=[],cursors=[],titles=[],screens=[],nameDraws=[],tokens=new Map();
   const paint=(row,value)=>{for(let stripe=0;stripe<8;stripe++)u.m.fill(value,0x4800+stripe*256+row*32,0x4820+stripe*256+row*32);};
   const checkScreen=()=>{const names=Array.from(text.matchAll(/^Name=(.*)$/gm),m=>m[1].trim()).slice(0,32),top=u.m[S.cfg_top];for(let row=0;row<8;row++){const expected=tokens.get(names[top+row])||0;for(let stripe=0;stripe<8;stripe++)assert(Array.from(u.m.slice(0x4800+stripe*256+row*32,0x4820+stripe*256+row*32)).every(v=>v===expected),'bitmap row survives scrolling in every ZX stripe');}screens.push({top,index:u.m[S.cfg_selected],names:names.slice(top,top+8)});};
   const banks=Array.from({length:8},(_,i)=>new Uint8Array(16384).fill(i+32));banks[6].fill(0);banks[6].set(bank6);
@@ -19,6 +20,7 @@ function cfgProfilesRegression(makeCpu,image,bios,S,bank6,sample) {
    if(pc>=0xc000&&pc<0xe000&&active!==6)throw Error('bank-6 instruction fetched with wrong bank mapped');
    if([S.send_string,S.print_working_directory,S.get_status_ftp].includes(pc))throw Error('profile browser sent a network command');
    if(pc===S.PAGE128){map(r.a&7);return {ret:true,a:16+active};}
+   if(pc===S.auto_login){logins++;assert(trampoline&&confirmed,'SS+L only after confirmed profile');assert(active!==6,'login after program-bank restoration');return {ret:true,a:0x55};}
    if(pc===S.cfg_read_file){loads++;assert(active===6,'CFG read in bank 6');if(missing)return {ret:true,carry:true};assert(text.length<=S.cfg_capacity,'test CFG fits');u.m.set(bytes(text+'\0'),S.cfg_file_here);return {ret:true,carry:false,hl:S.cfg_file_here,bc:text.length};}
    if(pc===S.KEYSCAN){if(dispatch&&!dispatchStarted){dispatchStarted=true;return {ret:true,a:103};}if(pendingCursor){const row=u.m[S.cfg_selected]-u.m[S.cfg_top];assert(Array.from(u.m.slice(0x5900,0x5a00)).every((v,i)=>v===(Math.floor(i/32)===row?56:7)),'existing cursor paints exactly one full-width row');assert(u.m[0x58ff]===0xa5&&u.m[0x5a00]===0xb6,'cursor does not spill outside list');assert(u.m[0x47ff]===0xc7&&u.m[0x5000]===0xd8,'scroll does not spill outside bitmap window');checkScreen();pendingCursor=false;}if(!keys.length)throw Error('unexpected extra keyboard wait');return {ret:true,a:keys.shift()};}
    if(pc===S.akey1)return {ret:true,a:13};
@@ -44,6 +46,7 @@ function cfgProfilesRegression(makeCpu,image,bios,S,bank6,sample) {
   if(trampoline)map(3);
   let result;try{result=u.call(dispatch?S.key_loop:trampoline?S.cfg_choose_profile:S.cfg_browser);}catch(e){if(e!==stop)throw e;result={a:0};}
   if(dispatch)assert(dispatchReturned,'actual G key dispatch uses CALL Z');
+  assert(logins===(trampoline&&confirmed?1:0),'ENTER invokes SS+L exactly once; cancel/missing never does');
   assert(loads===1,'G reloads CFG exactly once');
   assert(pointers.every((n,i)=>word(u.m,S[n])===positions[i]),'directory position and history preserved');
   assert(str(u.m,S.current_host)==='old-server'&&u.m[S.flag_dir]===(hasDirectory?1:0),'existing connection and directory validity unchanged');

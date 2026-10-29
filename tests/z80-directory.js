@@ -18,6 +18,8 @@ function makeCpu(code, bios, S, options={}) {
  case 0x31:{const sp=word();stack.length=(0xf000-sp)/2;break;}
  case 0x00:break;
  case 0x2f:a^=255;break;
+ case 0x07:cf=!!(a&128);a=((a<<1)|(a>>7))&255;break; // RLCA keeps Z
+ case 0xd3:{const port=(a<<8)|m[pc++];if(!options.onOut)throw Error('Unexpected OUT '+port.toString(16));options.onOut(port,a);break;}
  case 0xdb:{const port=(a<<8)|m[pc++];if(!options.onIn)throw Error('Unexpected IN '+port.toString(16));a=options.onIn(port)&255;break;}
  case 0x08:[a,aa]=[aa,a];[z,az]=[az,z];[cf,ac]=[ac,cf];break;
  case 0xd9:{const old=[b,c,d,e,h,l];[b,c,d,e,h,l]=alt;alt=old;break;}

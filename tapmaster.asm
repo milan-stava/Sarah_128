@@ -359,10 +359,7 @@ evaluate_crc	ld	hl,xor_yes_no		;check if crc byte matches physical check
 
 		ld	hl,xor_err
 		ld	a,#34
-		call	bsdos_tm
-        rst     0               ; invalid TAP: do not delete source or run output
-;		call	bsdos_tm		;show message and continue
-;		rst	0
+		jp	bsdos_tm		;show warning, then return and continue extraction
 	ENDIF
 
 save_general	ld	a,CREATX
@@ -724,7 +721,9 @@ dt1		ld	bc,(first_free)
 ;run2		ld	a,230		;"NEW"
 ;		ld	(SLAVE),a
 
-run1;		pop	hl		;HL=file number
+run1
+        call    set_3_5mhz      ; extraction used 20 MHz; launch at normal speed
+;		pop	hl		;HL=file number
 ;		ld	(SLAVE),hl	;uloz cislo pro BASIC
 ;		call	ROZLOZ
 ;		ld	hl,NNNAME
