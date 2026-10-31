@@ -323,7 +323,7 @@ todo:
 ;7) receive_data_timeout receive data with timeout.IN=BC=max.length of data to receive, HL=sata start, OUT Z= ok, received
 ;LOW LEVEL- PARSING
 ;10) look_for_string:	seeks certain string in memory
-;11) look_on_fly:	seeks certain string in the incoming flow of bytes
+;11) removed UART text matcher:	seeks certain string in the incoming flow of bytes
 ;12) search_by_Busy	seeks string in memory, according to Busy (in BSDOS)
 ;13) search_until_zero
 
@@ -375,7 +375,7 @@ todo:
 ;66) input_line		inputs line for user to enter anything
 ;68) cipsend_lod	sends purely AT+CIPSEND=1,data length
 ;69) display_progress	prints length of file each time file is loaded/saved
-;70) look_for_ipd	looks for IPDs in the incoming bytes
+;70) removed legacy IPD adapter
 ;81) set_3_5mhz
 ;82) set_20mhz
 ;83) send_ftp_command_in_pasive_mode	used in download file and retrieve dir list
@@ -729,6 +729,27 @@ kl_alogin	bit	1,(ix+0)		;carry out autologin? ;bit 1=login to server,0=automatic
 		jp	ftp_login
 
 
+ftp_control_ready:
+        ld a,(status_byte)
+        cp "3"
+        jr z,ftp_socket_ready
+        xor a
+        ret
+ftp_item_ready:
+        call ftp_ready
+        ret z
+        ld a,(ix+1)
+        and 1
+        ret
+ftp_ready:
+        ld a,(ix+0)
+        and 32
+        ret z
+ftp_socket_ready:
+        ld a,(at_closed)
+        cpl
+        and 1
+        ret
 key_loop	call	KEYSCAN
 	IFDEF bs_dos
         cp      "g"
@@ -780,6 +801,8 @@ kl2		call	z,ftp_login
 		cp	"r"
 		call	z,directory_retrieve
 
+		cp	"7"
+		call	z,create_dir
 		bit	0,(ix+1)		;dir already read?
 		jr	z,kl11
 ;;;vratit		jr	z,kl11			;Z=not read, skip some keys
@@ -796,8 +819,6 @@ kl2		call	z,ftp_login
 		call	z,enter_directory
 		cp	1			;BREAK to go to updir directly
 		call	z,go_updir
-		cp	"7"
-		call	z,create_dir
 		cp	#C			;DELETE key
 		call	z,delete_item_file
 		cp	"6"
@@ -1224,8 +1245,9 @@ change_host	ld	de,enter_url
 
 ;upload file
 ftp_upload_file
-		bit	5,(ix+0)
-		ret	z			;if no connection, return
+        call ftp_ready
+        ret z
+
 
 		ld	de,enter_fil_nam
 		call	print_ez1
@@ -1286,8 +1308,6 @@ fuf4		jp	z,clear_edit_zone
 		jr	fuf3			;endless loop!!!!
 
 fuf2		push	hl
-		ld a,1
-		ld (upload_legacy_mode),a
 
 		call	send_type_command_i	;switch to TYPE I (binary)
 		call	enter_passive_mode
@@ -1354,30 +1374,25 @@ ftp_upl_last	call	display_progress	;C= will be last load
 		pop	ix
 		call	ftp_send_loop
 
-ftp_upl_end	
-;	IF bs_dos=0
-	IFNDEF bs_dos
-		push	ix
-		call	fClose			;in Esxdos, the file must be closed, even if reading
-		pop	ix
-	ENDIF
-		ld	hl,at_cipclose1		;close data channel to complete upload
-		call	send_string
-		ld	c,7
-		jp	nz,ful_abort
-		call	set_3_5mhz
-		ld	de,226
-		call	receive_ftp_answer_isolated
-		ld	c,18
-		ld	(ix+23),0		;0= Transfer OK	
-		jp c,ful_abort
-		xor a
-		ld (upload_legacy_mode),a
-		jp directory_retrieve	;refresh using normal directory communication
-;		jp	nc,print_transfer_status
-;		jp	nc,clear_edit_zone	;successful end	
-
-
+ftp_upl_end
+        IFNDEF bs_dos
+        push ix
+        call fClose
+        pop ix
+        ENDIF
+        call set_20mhz
+        call ftp_close_data
+        call ftp_active_reply
+        ld de,226
+        or a
+        sbc hl,de
+        ld c,18
+        jp nz,ful_abort
+        ld hl,TX_buf
+        call print_ftp_message
+        ld (ix+23),0
+        call set_3_5mhz
+        jp directory_retrieve
 ful_abort  call set_3_5mhz
            res 4,(ix+3)
            ld de,426
@@ -1387,13 +1402,7 @@ ful_abort  call set_3_5mhz
            or a
            sbc hl,bc
            jr nz,ful_abort_final
-           ex de,hl               ;second reply, if already in the same IPD packet
-           ld a,h
-           or l
-           jr nz,ful_abort_final_code
-           call upl_old_read_reply ;later IPD: same reception as original upload
-           ld de,RX_buf
-           call ConvRStr16
+           call ftp_active_reply
            jr ful_abort_final_code
 ful_abort_final
            add hl,bc              ;restore first reply code
@@ -1408,8 +1417,7 @@ ful_abort_final_code
            ld c,16
            jp nz,error_handler    ;never send TYPE after an unconfirmed ABOR
 ful_abort_done
-           xor a
-           ld (upload_legacy_mode),a
+
            ld (ix+23),1
            call print_transfer_status
            call directory_retrieve
@@ -1443,23 +1451,22 @@ ftp_send_lastc	add	hl,bc
 
 ftp_upl_send	ld	(ftp_upl_len),bc
 		push	bc
+		call	set_20mhz
 		call	cipsend_lod		;send AT+CIPSEND=1,length_of_data
 		ld	c,6
 		jp	c,ful_abort
 ;		jp	c,error_handler
+		call	set_7mhz
+        ld      bc,#1500        ; diagnostic guard: about 20 ms at 7 MHz after '>'
+upl_tx_start_wait
+        dec     bc              ; give ESP time to enter its serial data receiver
+        ld      a,b
+        or      c
+        jr      nz,upl_tx_start_wait
 		pop	bc
 		push	bc
 		ld	hl,(ftp_upl_start)	;IN=BC=lenght of data (#400 bytes or lower)
 		push	hl
-
-;		ei				;should be there according to manual, but works without the 20 ms pause
-;		halt
-;		halt
-;		nop
-;		di				;wait 20 ms (one interrupt) as AT+CIPSEND command requires in the manual
-
-;		ld	de,0
-;		call	send_block
 
 		call	send_data
 
@@ -1473,28 +1480,22 @@ ftp_upl_send	ld	(ftp_upl_len),bc
 ;		jp	nz,error_handler
 
 
-		ld	(ix+6),#30
-fus1		call	clear_RX_buf
-		ld	hl,RX_buf
-		push	hl
-		ld	bc,#20
-		push	bc
-		call	receive_data_timeout
-		pop	bc
-		pop	hl
-		ld	de,sendok
-		call	look_for_string
-		jr	z,fus2
-		dec	(ix+6)
-		jr	nz,fus1
-		ld	c,8
-		jp	ful_abort
-
-fus2		ret				;upload of packets works without 20 ms pause
-;		ei				;should be there according to manual, but works without the 20 ms pause
-;		halt
-;		di				;wait 20 ms (one interrupt) as AT+CIPSEND command requires in the manual
-;		ret
+        call set_20mhz
+fus1    xor a
+        ld (upload_last_event),a
+        inc a
+        ld (ftp_upload_wait),a
+        call at_wait_send
+        ld (upload_last_event),a
+        push af
+        xor a
+        ld (ftp_upload_wait),a
+        call set_7mhz
+        pop af
+        ld c,8
+        jp c,ful_abort
+fus2    ret
+upload_last_event db 0
 ftp_upl_len	dw	#5555			
 ftp_upl_start	dw	#5555
 
@@ -1509,8 +1510,9 @@ ftp_upl_start	dw	#5555
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; --- KONEC DOKUMENTACE CZ ---
 ftp_quit_connection
-		bit	5,(ix+0)
-		ret	z			;if no connection, return
+        call ftp_ready
+        ret z
+
 
 		ld	de,ftp_quit+3
 		call	print_ez1
@@ -1542,7 +1544,7 @@ ftp_download_file_under_cursor
         ld      a,2
         ld      (transfer_flag),a
 
-        bit     5,(ix+0)
+        call    ftp_item_ready
         jr      z,.result       ; bez pripojeni nestahovat
 
         call    save_dir_position_snapshot
@@ -1577,6 +1579,9 @@ ftp_download_file_under_cursor
 ; Poznamka: Mění přenosové buffery, diskový stav a transfer_flag.
 ; --- KONEC DOKUMENTACE CZ ---
 ftp_download_file_var
+        call ftp_ready
+        ret z
+
 		call save_dir_position_snapshot
 		call	send_type_command_i	;switch to TYPE I (binary)
 		call	ftp_download_file_var1
@@ -1590,6 +1595,9 @@ ftp_download_file_var
 ; Poznamka: Mění přenosové buffery, diskový stav a transfer_flag.
 ; --- KONEC DOKUMENTACE CZ ---
 ftp_download_file_new
+        call ftp_ready
+        ret z
+
 		call save_dir_position_snapshot
 		call	send_type_command_i	;switch to TYPE I (binary)
 		call	ftp_download_file_new1
@@ -1604,8 +1612,9 @@ ftp_download_file_new
 ; Poznamka: Mění přenosové buffery, diskový stav a transfer_flag.
 ; --- KONEC DOKUMENTACE CZ ---
 ftp_download_file_dir
-		bit	5,(ix+0)
-		ret	z			;if no connection, return
+        call ftp_item_ready
+        ret z
+
 
 		call save_dir_position_snapshot
 		call	send_type_command_i	;switch to TYPE I (binary)
@@ -1751,8 +1760,6 @@ fdfd2		exx
 
 
 ftp_download_file_var1				;download file from variable
-		bit	5,(ix+0)
-		ret	z			;if no connection, return
 	
 		call	clear_inp_buf
 		ld	hl,var_name
@@ -1779,8 +1786,6 @@ fdfv1		ld	a,1
 
 
 ftp_download_file_new1				;download file from input
-		bit	5,(ix+0)
-		ret	z			;if no connection, return
 
 		ld	de,enter_fil_nam
 		call	print_ez1
@@ -2001,8 +2006,10 @@ fdf_main	ld	ix,flag1
 		call	display_progress
 		ld	hl,(rest_len)		;main loop taking buffer by buffer
 		ld	de,(rest_len+2)
-		or	a
-		sbc	hl,de			;is rest_len=0?
+		ld a,h
+        or l
+        or d
+        or e
 		jr	z,fdfm2			;Z=no more download
 		call	fdf_loop
 		jr	fdf_main
@@ -2052,12 +2059,15 @@ fdf6		ld	hl,ftp_dir_start	;loop, that downloads and saves 1x buffer, or less
 		
 fdf3		ld	hl,(rest_len)
 		ld	de,(rest_len+2)
-		or	a
-		sbc	hl,de
+		ld a,h
+        or l
+        or d
+        or e
 		jp	z,save_into_file	;Z=file completed
 
 
 		call	data_available_in_module_file
+        jr c,fdf_loop_err
 		ld	c,26
 		jr	nz,fdf5
 
@@ -2160,6 +2170,8 @@ buff_add_float	dw	#5555			;in bytes, moving address throughout the buffer, where
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; --- KONEC DOKUMENTACE CZ ---
 enter_command
+        call ftp_control_ready
+        ret z
 		ld	de,enter_comm
 		call	print_ez1
 
@@ -2189,6 +2201,9 @@ enter_command
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; --- KONEC DOKUMENTACE CZ ---
 rename_item_file
+        call ftp_item_ready
+        ret z
+
 		scf
 		call	get_item_name
 		cp	3
@@ -2230,7 +2245,7 @@ rename_item_file
 ; Vystup: Zpracovaná velikost nebo chybové hlášení.
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; --- KONEC DOKUMENTACE CZ ---
-ftp_file_size	bit	5,(ix+0)
+ftp_file_size call ftp_ready
 		ret	z			;if no connection, return
 
 
@@ -2288,6 +2303,9 @@ ffc1_copy:
 ;   mazacího příkazu.
 ; --- KONEC DOKUMENTACE CZ ---
 delete_item_file
+        call ftp_item_ready
+        ret z
+
 		ld	de,yesno
 		call	print_ez1
 
@@ -2305,7 +2323,7 @@ dif2		call	clear_edit_zone
 		jr	nz,dif3			;Z=delet file under cursor
 		call	dif_sub
 		call	c,akey			;for user to read ftp error return code
-		jr	cd1			;jp directory_retrieve
+		jp	cd1			;jp directory_retrieve
 
 dif3		ld	hl,ftp_dir_start+fi_len-2	;first real directory item
 		ld	(cur_item_addr),hl
@@ -2394,7 +2412,10 @@ remove2		ex	af,af'
 ; Vystup: Nový adresář na serveru a obnovený seznam.
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; --- KONEC DOKUMENTACE CZ ---
-create_dir	ld	de,enter_dir
+create_dir
+        call ftp_ready
+        ret z
+	ld	de,enter_dir
 		call	print_ez1
 
 		ld	a,2
@@ -2474,7 +2495,10 @@ ftp_login	call	get_status_ftp		;find out if already connected to ftp server
 
 fl5		call	connect_to_ftp_server	;connect to new server
 
-fl_usr_psw	res	4,(ix+3)		;ID=0
+fl_usr_psw ld a,(error_recovering)
+        cp 2
+        jp z,error_handler
+        res 4,(ix+3)		;ID=0
 		ld	de,enter_usr		;enter& send username
 		call	print_ez1
 
@@ -2996,7 +3020,10 @@ search_by_Busy_dir_slow:
 ;   HL', IY používané parserem/přenosem.
 ; Poznamka: Mění banky, ukazatele a příznaky adresáře; řeší plnou paměť i přerušení.
 ; --- KONEC DOKUMENTACE CZ ---
-directory_retrieve				;retrieve directory list
+directory_retrieve
+        call ftp_ready
+        ret z
+				;retrieve directory list
 		xor a
 		ld (dr_reply_pending),a
 		call	cls_9			;clear screen from previous directory
@@ -3788,7 +3815,10 @@ dir_search_patlen dw 0
 ; Vystup: Nově načtený nadřazený adresář.
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; --- KONEC DOKUMENTACE CZ ---
-go_updir;	call	check_updir
+go_updir
+        call ftp_ready
+        ret z
+;	call	check_updir
 		res	6,(ix+1)		;signal, you go updir
 		bit	0,(ix+1)
 		jp	nz,go_updir1
@@ -3831,6 +3861,7 @@ download_screen	ld	(blen),de		;length of screen= counter (6144 or 6912)
 		ld	(buff_add_float),hl
 
 ds1		call	data_available_in_module_file
+        jr c,download_screen_abort
 		jr	nz,ds2
 
 ;	IFDEF hgfx64x24
@@ -3839,15 +3870,22 @@ ds1		call	data_available_in_module_file
 
 		ld	c,44
 		call	display_error
+download_screen_abort
+        call ftp_abort_transfer
+        jr download_screen_restore
 download_screen_end
-
-		call	set_3_5mhz
-		res	4,(ix+0)		
-		call	akey1
-		set	4,(ix+0)
-
-		call	passive_receive_off
-
+        res 4,(ix+0)
+        call ask_for_reply_in_passive_mode
+        ld de,226
+        or a
+        sbc hl,de
+        jp nz,ftp_frame_error
+        call ftp_close_data
+        call passive_receive_off
+        call set_3_5mhz
+        call akey1
+download_screen_restore
+        set 4,(ix+0)
 	IFDEF hgfx64x24
 
 		call hgfx_init
@@ -3882,7 +3920,10 @@ ds2		ld	b,h
 ; Vystup: Změněný adresář nebo zobrazený obrázek.
 ; Meni: AF, BC, DE, HL, BC'; další změny dle volaných BIOS/DOS a tiskových služeb.
 ; --- KONEC DOKUMENTACE CZ ---
-enter_directory	;and	a
+enter_directory
+        call ftp_item_ready
+        ret z
+	;and	a
 ;		call	get_item_name
 ;		ld	a,e
 ;		or	a
@@ -3900,7 +3941,7 @@ enter_directory	;and	a
 		call	get_item_name
 		push	af			;preserve item type across bank-safe name copy
 		call	get_extension
-		ld	(ix+41),a		;save extension for later use
+		ld	(ix+item_extension-flag1),a		;save extension for later use
 		ld	de,INPBUFF
 		call	DIR128_COPY_NAME_TO_DE
 		xor	a
@@ -3914,7 +3955,7 @@ enter_directory	;and	a
 						;if A=2, item is NLST mode and could be file or dir
 
 ;tady rozhodujeme, pokud je soubor po kurzorem TAPka, snap, TXT, POK, atd....
-		ld	a,(ix+41)
+		ld	a,(ix+item_extension-flag1)
 		IFDEF bs_dos
 		cp  3				;0=TAP, 1=Z80, 2=SNA
 		jp 	c,enter_tap		;spolecny vstup pro TAP a SNA
@@ -4030,7 +4071,7 @@ enter_snap	call 	ftp_download_file_under_cursor
 			ld		a,program_page
 			call	PAGE128
 
-			ld	a,(ix+41)		;A=extension
+			ld	a,(ix+item_extension-flag1)		;A=extension
 			or	a
 			jp	z,work_tap		;skok na rozbaleni a spusteni TAPky
 			jp	work_snap		;A=1 Z80, 2=SNA- nahravame snapy
@@ -4969,10 +5010,21 @@ mi2		ld	(mark_counter),hl
 ;   rychlém hledání.
 ; Poznamka: Normalizuje INPBUFF, mění txtlen+1, mark_counter a pracovní find_*.
 ; --- KONEC DOKUMENTACE CZ ---
-find_items	ld	de,find_txt
+find_input:
+        ld a,(PAGE128_STATE)
+        push af
+        ld a,program_page
+        call PAGE128
+        call find_input_bank
+        ex af,af'
+        pop af
+        call PAGE128
+        ex af,af'
+        ret
+find_items ld de,find_txt
 		call	print_ez1
 
-		call	input_line
+		call	find_input
 		jp	z,clear_edit_zone	;Z=abort pressed
 		ld	b,0			;BC=length of search string
 		ld	(txtlen+1),bc
@@ -5106,7 +5158,9 @@ unma1		call	un_mark_all
 ; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
 ; Poznamka: HGFX používá FDMA a poté obnoví parametry pro tisk znaků.
 ; --- KONEC DOKUMENTACE CZ ---
-undraw_cursor	call	DIR128_CUR_ATTR_HL
+undraw_cursor	bit 0,(ix+1)
+        ret z
+        call DIR128_CUR_ATTR_HL
 	IFDEF hgfx64x24
 		ld	bc,mark_no_cursor
 	ELSE
@@ -5757,60 +5811,6 @@ lfs5		ld sp,#5555
 
 
 
-
-;IN=HL=start of looked for string, must end with 0
-;OUT=Z=string found, NZ=string not found
-;11)
-; --- DOKUMENTACE CZ: look_on_fly ---
-; Ucel: Hledá nulou ukončený text přímo v přijímaných bajtech UART.
-; Vstup: HL = hledaný neprázdný text.
-; Vystup: Z = text nalezen, NZ = vypršelo hledání.
-; Meni: AF, BC, E, HL, BC'; navíc dle rece_byte.
-; Poznamka: Přijaté bajty spotřebuje; neukládá je do RX_buf.
-; --- KONEC DOKUMENTACE CZ ---
-look_on_fly	exx
-		ld	bc,0
-		exx
-		ld	e,#FF		;e= flag, Z=found,NZ=not found
-		ld	b,e
-		ld	c,e		;BC=timeout
-lof3		push	hl
-lof1		dec	bc		;bugfix 0.3
-lof5		scf
-		call	rece_byte
-		jr	nz,lof4
-
-		exx			;Z= no byte to receive. ESP can just breathe out and then continue
-		dec	bc
-		ld	a,c
-		or	b
-		exx
-		jr	z,lofend	;Z=really, no byte to collect
-		jr	lof5
-
-lof4		cp	(hl)
-		ld	e,0
-		jr	z,lof2		
-
-		dec	e		;NZ,char does not match, bring another byte
-		pop	hl
-		ld	a,b		;max of 65535 unsucessfull tries
-		or	c
-		jr	z,lofend1
-		jr	lof3		
-
-lof2		inc	hl
-		ld	a,(hl)
-		or	a
-		jr	nz,lof1		;still not end, continue search
-		
-		
-            jr      lof_found
-lofend      ld      e,#FF           ; timeout neni uspech pri castecne shode
-lof_found   pop     hl
-lofend1		inc	e
-		dec	e
-		ret			;Z/NZ
 
 ;12)
 ; --- DOKUMENTACE CZ: search_by_Busy ---
@@ -6949,6 +6949,13 @@ get_status_ftp
 
         jp nz,cr_err
         call at_status_response
+        push af
+        ld a,(at_status_data)
+        or a
+        jr z,.status_ready
+        pop af
+        jp ftp_recover_session
+.status_ready pop af
         ld hl,RX_buf
         ld bc,128
         push hl
@@ -7501,9 +7508,6 @@ chma1		dec	(ix+6)
 ; Poznamka: Cte proud do konce hledaneho textu, dalsi bajty nemaze. Hledani ma timeout.
 ; --- KONEC DOKUMENTACE CZ ---
 check_module_answer
-            ld a,(upload_legacy_mode)
-            or a
-            jp nz,upl_old_check_module_answer
             ld de,char_zob
             or a
             sbc hl,de
@@ -7511,8 +7515,6 @@ check_module_answer
             jr nz,.wait
             ld a,AT_PROMPT
 .wait       jp at_wait_event
-chma3       scf
-            ret
 ;61) !!!"receives_ftp_answer" is a part of send_ftp_command routine. Programs enters it with 2 byte ftp code on the stack!!!
 ;"receive_ftp_answer_isolated" can be used extra. IN=DE=ftpcode we expect
 
@@ -7538,103 +7540,24 @@ receive_ftp_answer_isolated
 ;   rozhraní.
 ; Poznamka: Mění RX_buf a výpis zpráv. Chyby transportu mohou přejít do error_handler.
 ; --- KONEC DOKUMENTACE CZ ---
-receive_ftp_answer				;new concept
-;		ld	(ix+6),2		;was 0	
-;		push	hl			;HL=code number we want
-		call	clear_RX_buf
-rfa3		ld a,(upload_legacy_mode)
-		or a
-		jr nz,rfa_legacy_wait
-		call at_wait_send
-		ld c,36
-		jp c,error_handler
-		jr rfa2
-rfa_legacy_wait ld	hl,ok			;look for "OK"
-		call	look_on_fly		;lasts 4 seconds. 1x attempt is enough
-		jr	z,rfa2
-;		dec	(ix+6)
-;		jr	nz,rfa3
-		ld	c,36
-		jp	error_handler
-;		jr	nz,sfcerr2
-;		jr	nz,rfa_err
-
-;		halt				;testing purposes
-
-rfa2        ld a,(upload_legacy_mode)
-            or a
-            jr z,rfa_modern_reply
-            call upl_old_read_reply
-            jr rfa_parse_reply
-rfa_modern_reply
-            call ftp_active_reply
-            push hl
-            ld hl,ftp_reply_line
-            call print_ftp_message
-            pop hl
-            pop bc
-            or a
-            sbc hl,bc
-            add hl,bc
-            ld de,0
-            jp nz,sfcerr3
-            xor a
-            ret
-rfa_parse_reply
-            ld de,RX_buf
-		push	de			;DE=start of message to print
-		call	ConvRStr16
-		pop	de			;DE=start address of message to print
-		push	hl			;HL=code number we received
-		ld	h,d			;na zasobniku mame: code we received, code we want
-		ld	l,e			;HL=start address of message to print
-
-		call	print_ftp_message
-
-		pop	hl			;HL=code number we received
-		pop	bc			;BC=code we expect
-		or	a
-		sbc	hl,bc
-		add	hl,bc			;HL=code we obtained
-;		jp	nz,sfcerr3
-		push	af		;preserve Z flag
-
-		push	hl		;HL=code we obtained
-		ld	hl,RX_buf
-		ld	bc,#80
-		ld	de,eol
-		call	look_for_string		;oetøit? ukonèení øádku je vdycky!!
-		push	de			;DE=start of message 2
-		ld	a,(de)
-		or	a
-		jr	z,rfa4			;Z=second message does not exist
-
-		call	ConvRStr16
-		pop	de			;DE=start of message 2
-		push	hl		;HL=2nd code number
-		ld	h,d
-		ld	l,e
-		call	print_ftp_message
-
-		pop	de		;DE=2nd code number
-		pop	hl		;HL=1st code number
-		pop	af
-		jp	nz,sfcerr3
-		jr	rfa5		
-
-rfa4		pop	de			;DE=indifferent
-		ld	de,0			;DE=0=signal no 2nd code came in
-		pop	hl			;HL=1st code we obtained
-		pop	af
-		jp	nz,sfcerr3
-
-rfa5		xor	a			;set A=0 and NC=all ok
-		ret
-		
-
-;rfa_err		ld	c,11
-;		jp	display_error
-		
+receive_ftp_answer
+        call clear_RX_buf
+rfa3    call at_wait_send
+        ld c,36
+        jp c,error_handler
+rfa2    call ftp_active_reply
+        push hl
+        ld hl,ftp_reply_line
+        call print_ftp_message
+        pop hl
+        pop bc
+        or a
+        sbc hl,bc
+        add hl,bc
+        ld de,0
+        jp nz,sfcerr3
+        xor a
+        ret
 
 ;62) clears RX and TX buffers, or only one of them
 ; --- DOKUMENTACE CZ: clear_buffers ---
@@ -7704,29 +7627,45 @@ clear_TX_buf	ld	hl,TX_buf
 ; Poznamka: Obnovuje 3,5 MHz a vypíná pasivní příjem.
 ; --- KONEC DOKUMENTACE CZ ---
 error_handler xor a
-           ld (upload_legacy_mode),a
-           push bc                ;preserve original error across clock switch
+           ld (ftp_upload_wait),a
+           push bc
            call set_3_5mhz
            pop bc
            ld a,(error_recovering)
+           cp 2
+           jp z,ftp_recovery_failed
            or a
-           jr nz,error_handler_exit ;cleanup itself failed: do not recurse again
-           inc a
+           jr nz,error_handler_exit
+           ld a,c
+           ld (ftp_last_error),a
+           cp 4
+           jp z,ftp_recovery_begin
+           cp 16
+           jp z,ftp_recovery_begin
+           cp 36
+           jp z,ftp_recovery_begin
+           cp 43
+           jp z,ftp_recovery_begin
+           cp 48
+           jp z,ftp_recovery_begin
+           cp 49
+           jp z,ftp_recovery_begin
+           ld a,1
            ld (error_recovering),a
            call display_error
            call wifi_unwait
            call at_reset_stream
            bit 6,(ix+0)
-           jr z,error_handler_exit ;no cleanup AT commands at an unknown baud
-           call passive_receive_off ;one best-effort cleanup attempt only
+           jr z,error_handler_exit
+           call passive_receive_off
 error_handler_exit
            xor a
            ld (error_recovering),a
            bit 6,(ix+0)
            jp z,quit_keep_directory
-           ld sp,basic_end-2
-           ret
+           jp initsp_keyloop
 error_recovering db 0
+ftp_last_error db 0
 ; --- DOKUMENTACE CZ: display_error ---
 ; Ucel: Vypíše číslo chyby a počká na potvrzení klávesou.
 ; Vstup: C = číslo chyby; IX = flag1.
@@ -7801,10 +7740,6 @@ cs_con_buf	ld	hl,TX_buf		;send it
 		jp	nz,error_handler
 
 		ld hl,ok
-		ld a,(upload_legacy_mode)
-		or a
-		jr z,cs_wait_answer
-		ld hl,CONNECT
 cs_wait_answer
 ;		ld	de,CONNECT		;check for answer
 		jp	check_module_answer
@@ -8128,42 +8063,6 @@ dp0		inc	de
 		pop	hl
 		jp	PRINTHL
 
-;70) look_for_ipd	looks for IPDs in the incoming bytes
-;OUT=A=connection number (0-3),HL= length of data (eg. +IPD,0,25:)
-;!!!! in active mode returns eg: +IPD,0,25:331 Password required....
-;!!!! in passive mode returnseg: +IPD,0,11. 11 bytes data then have to be fetched with AT+CIPRECVDATA=0,11.!!!
-
-; --- DOKUMENTACE CZ: look_for_ipd ---
-; Ucel: Najde a zpracuje hlavičku +IPD v aktivním příjmu.
-; Vstup: Příchozí UART data ve formátu +IPD,kanál,délka:.
-; Vystup: NC = A číslo kanálu, HL délka; C = chyba, C (registr) číslo chyby.
-; Meni: AF, BC, DE, HL, BC' (přes příjem odpovědi); další registry externích služeb viz jejich
-;   rozhraní.
-; Poznamka: Po úspěchu je další čtený bajt začátkem užitečných dat; mění RX_buf a (IX+6).
-; --- KONEC DOKUMENTACE CZ ---
-look_for_ipd	ld	(ix+6),3		;RX_buf obsahuje rozectenou FTP odpoved
-lfi7		ld	hl,ipd			;"+IPD,"
-		call	look_on_fly
-		jr	z,lfi3
-;		dec	(ix+6)
-;		jr	nz,lfi7
-lfi_err		ld	c,12
-lfi_err1	scf				;set C to indicate error
-		ret
-;		jp	error_handler
-
-lfi3        call ftp_read_byte
-            sub "0"
-            cp 5
-            jp nc,ftp_frame_error
-            push af
-            call ftp_read_byte
-            cp ","
-            jp nz,ftp_frame_error
-            call ftp_read_length
-            pop af
-            or a                    ; NC, A=kanal, HL=delka
-            ret
 ;73)prints status of URL and login
 ; --- DOKUMENTACE CZ: print_ftp_status ---
 ; Ucel: Vypíše stav přihlášení a aktuální server.
@@ -8811,21 +8710,44 @@ data_available_in_module
 data_available_in_module_dir
 		ld	a,#20			;for dir 5 repetitions should be enough
 		jr	dam6
-; --- DOKUMENTACE CZ: data_available_in_module_file ---
-; Ucel: Zjistí délku dat čekajících v modulu pomocí AT+CIPRECVLEN?.
-; Vstup: Aktivní pasivní příjem; IX = flag1.
-; Vystup: NZ = HL dostupná délka omezená download_length; Z a HL=0 = bez dat.
-; Meni: AF, BC, DE, HL; u volaných BIOS/DOS a tiskových služeb viz jejich rozhraní.
-; Poznamka: Varianta dir (také základní vstup) používá #20 pokusů, file #80. DE není zaručený
-;   limit: při datech drží zjištěnou délku.
-; --- KONEC DOKUMENTACE CZ ---
+; data_available_in_module_file:
+; NZ/NC = HL available data (clamped to download_length).
+; Z/NC = closed socket with no queued bytes; Z/C = user pressed B.
+; Temporary emptiness is paced and retried, never treated as EOF.
+; Empty polls wait until data, confirmed closure or B; AT query replies remain bounded.
+; Changes AF/BC/DE/HL. Directory polling above keeps its own completion policy.
 data_available_in_module_file		
-		ld	a,#80			;for sucessful file download we need more than for dir, theoretically can be
+.file_wait:
+        call    ftp_query_lengths
+        ld      a,h
+        or      l
+        jr      nz,.file_data
+        ld      a,(at_closed)
+        and     3
+        jr      nz,.file_closed ; real closure plus empty buffer, not a Wi-Fi pause
+        call    ftp_poll_delay
+        call    ftp_poll_cancel
+        jr      c,.file_cancel
+        jr      .file_wait
+.file_data:
+        jp      dam_available
+.file_closed:
+        call    ftp_query_lengths ; recheck after closure notice: final bytes may be queued
+        ld      a,h
+        or      l
+        jr      nz,.file_data
+        xor     a
+        ret
+.file_cancel:
+        xor     a
+        scf
+        ret
 dam6        ld (ix+6),a
 dam1        call ftp_query_lengths
             ld a,h
             or l
             jr z,dam3
+dam_available
 		ld	de,download_length
 		ex	de,hl
 		or	a
@@ -9793,8 +9715,6 @@ ftp_type	db "TYPE ",0	;we use "A" or "I"
 ;answers
 data		db "DATA",0
 STATUS		db "STATUS:",0
-CONNECT		db "CONNECT",0
-sendok		db "SEND "
 ok		db "OK"
 eol		db #D,#A,0
 dvojt		db ":",0
@@ -9806,7 +9726,6 @@ char_zob	db "OK",13,10,"> ",0
 ok_		db "OK",0
 no_ap		db "No AP",0
 error_answ	db "ERROR",0
-ipd		db #D,#A,"+IPD,",0
 ;code_226	db "226",0
 ciprecvdata	db "+CIPRECVDATA,",0
 ;closed		db "CLOSED",#D,#A,0
@@ -9838,7 +9757,7 @@ menu1		db "F-file T-start A-YES H-host E-usr ss+/P-pass U-upl S-size Q-quit",0
 	ENDIF
 ;menu1		db "S-size Q-quit F-file T-start A-YES H-host R-user P-pass U-upld",0
 ;menu2		db "W-wifi OFF ss+/L-auto/login O-logoff V-save app ss+/D-dwnld/file",0
-menu2		db "W-wifi OFF Cs/ss+/L-login O-logoff V-savApp Cs/ss+/D-dwnld C-com",0
+menu2		db "W-wifi OFF ss+/L-login O-logoff V-savApp Cs/ss+/D-dwnld C-com",0
 file		db "File: ",0
 start		db "  Start: ",0
 user		db "  User: ",0
@@ -9987,7 +9906,7 @@ flag_dir	db 0		;IX+1, flag related to dir
 				;bit 5= temporary flag, item being read in is file or dir, 0=file, 1=dir
 				;bit 6= direction we go. 1= enter dir, 0= going updir
 				;bit 7= are we testing first item "Total XY"?, 0=no, 1=yes
-ud_speed	db 16		;IX+2,we want speed 16 for now (it is max speed)
+ud_speed	db 12		;IX+2, test upload stability at 1152000 baud (was 16=3456000)
 flag2		db 0		;IX+3, print send command,0=NO, 1=YES
 						;bit 5 = smazat puvodni TAP po uspesnem rozbaleni: 0=NE, 1=ANO
 						;bit 6 = zustat v Sare po rozbaleni:               0=spustit, 1=zustat
@@ -10023,7 +9942,8 @@ item_counter	dw #5555	;IX+35, counts items in the directory view (files+dirs)
 dir_restore_item dw 0
 dir_restore_row db 1
 dir_list_pointer dw dir_list_start
-item_extension	db #55	 ;IX+41, extension of the item under cursor
+item_extension	db #55	 ;IX+42, use item_extension-flag1 instead of a numeric offset
+        ASSERT item_extension-flag1 >= 0 && item_extension-flag1 < 128
 ;end of flags
 
 ;core		db #55,#55,#55	
@@ -10043,8 +9963,8 @@ buffers_len	equ $-RX_buf
 	ENDIF
 
 	include "ftp_directory_io.asm"
-	include "ftp_upload_legacy.asm"
 	include "wifi_protocol.asm"
+        INCLUDE "ftp_recovery.asm"
 
 bios_start
 		INCBIN "WifiBios20_MB_EL.cod"
@@ -10126,6 +10046,7 @@ total_len	equ $-start_ldir
         PAGE program_page
         ORG #C000
 program_page_start:
+        INCLUDE "find_input_bank.asm"
         IFDEF bs_dos
         INCLUDE "2nd_program_bank.asm"
         ELSE

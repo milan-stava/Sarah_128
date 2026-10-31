@@ -38,20 +38,21 @@ function inputEditorRegression(makeCpu,image,bios,S) {
  x=run({initial:'abcd',keys:[8,12,13]});assert(x.text==='abd','backspace removes character before cursor');
  x=run({initial:'abcd',keys:[8,8,15,13]});assert(x.text==='abd','forward delete removes character under cursor');
  x=run({initial:'abcd',keys:[8,8,8,8,12,13]});assert(x.text==='abcd'&&!x.result.z&&x.result.bc===4,'ENTER at column zero keeps nonempty value; backspace at start is safe');
- x=run({initial:'old',keys:[199,110,101,119,13]});assert(x.text==='new'&&x.snapshots[1].cursor===0,'SS+Q clears value instead of reloading it');
+ x=run({initial:'old',keys:[7,110,101,119,13]});assert(x.text==='new'&&x.snapshots[1].cursor===0,'EDIT clears value instead of reloading it');
+ x=run({initial:'old',keys:[199,13]});assert(x.text==='old','SS+Q no longer clears input');
  x=run({initial:'ignored',entry:'input_line'});assert(x.text===''&&x.result.z,'new-value entry starts empty');
- x=run({initial:'old',keys:[199,13]});assert(x.text===''&&x.result.z&&x.result.bc===0,'empty ordinary field is not applied');
+ x=run({initial:'old',keys:[7,13]});assert(x.text===''&&x.result.z&&x.result.bc===0,'empty ordinary field is not applied');
  x=run({initial:'x'.repeat(80),entry:'input_line_edit_limit',limit:5,keys:[89,13]});assert(x.text==='xxxxx'&&x.result.bc===5,'field-specific limit bounds initial value and typing');
  x=run({initial:'abcde',entry:'input_line_edit_limit',limit:5,keys:[8,8,90,13]});assert(x.text==='abcde','insertion in a full field preserves its suffix');
  x=run({initial:'abcde',entry:'input_line_edit_limit',limit:5,keys:[8,8,15,90,13]});assert(x.text==='abcZe','delete frees space for insertion inside a full field');
  x=run({initial:'a'.repeat(63),keys:[90,...Array(63).fill(8),...Array(64).fill(15),13]});assert(x.text===''&&x.result.bc===0,'full-buffer insertion/deletion stays bounded');
  x=run({keys:[...Array(70).fill(65),13]});assert(x.text==='A'.repeat(63)&&x.result.bc===63,'63 visible characters plus cursor, no overflow');
- for(const key of [1,4]){x=run({initial:'old',keys:[199,120,key]});assert(x.result.z&&x.result.a===4,'BREAK/legacy code 4 cancels '+key);}
+ for(const key of [1,4]){x=run({initial:'old',keys:[7,120,key]});assert(x.result.z&&x.result.a===4,'BREAK/legacy code 4 cancels '+key);}
  for(const [caps,space] of [[false,false],[false,true],[true,false]]) {
   const overlap={code:1,caps,space};
-  x=run({initial:'original',keys:[199,97,overlap,98,overlap,13]});assert(x.text==='ab'&&!x.result.z,'overlapping keys keep INPUT open and editable '+caps+'/'+space);
-  x=run({entry:'set_user',keys:[199,97,overlap,98,13],setup:m=>put(m,S.var_user,'old')});assert(!x.cancelled&&str(x.u.m,S.var_user)==='ab','setter confirms after overlapping keys '+caps+'/'+space);
-  x=run({entry:'set_pass',mask:true,keys:[199,97,overlap,98,13],setup:m=>put(m,S.var_pasw,'old')});assert(!x.cancelled&&str(x.u.m,S.var_pasw)==='ab'&&x.u.m[S.INX_HS+1]===0,'masked password survives overlap '+caps+'/'+space);
+  x=run({initial:'original',keys:[7,97,overlap,98,overlap,13]});assert(x.text==='ab'&&!x.result.z,'overlapping keys keep INPUT open and editable '+caps+'/'+space);
+  x=run({entry:'set_user',keys:[7,97,overlap,98,13],setup:m=>put(m,S.var_user,'old')});assert(!x.cancelled&&str(x.u.m,S.var_user)==='ab','setter confirms after overlapping keys '+caps+'/'+space);
+  x=run({entry:'set_pass',mask:true,keys:[7,97,overlap,98,13],setup:m=>put(m,S.var_pasw,'old')});assert(!x.cancelled&&str(x.u.m,S.var_pasw)==='ab'&&x.u.m[S.INX_HS+1]===0,'masked password survives overlap '+caps+'/'+space);
  }
  // Execute actual INKEY against a keyboard matrix: BREAK and rollover both
  // yield code 1, so INPUT must inspect the physical keys to distinguish them.
@@ -61,11 +62,12 @@ function inputEditorRegression(makeCpu,image,bios,S) {
   [{0x7ffe:0xfe,0xfefe:0xfe},1],       // CAPS SHIFT+SPACE
   [{0x7ffe:0xfe,0xfdfe:0xfe},1],       // SPACE+A
   [{0xfefe:0xfe,0xfdfe:0xfe},65],      // CAPS SHIFT+A
+  [{0xfefe:0xfe,0xf7fe:0xfe},7],     // CAPS SHIFT+1 / EDIT
   [{0x7ffe:0xfd,0xfbfe:0xfe},199],     // SYMBOL SHIFT+Q
  ]) {
   const u=makeCpu([],bios,S,{image,onIn:port=>rows[port]??0xff});const result=u.call(S.inkey);assert(result.a===expected,'real INKEY reports matrix '+JSON.stringify(rows));
  }
- for(const mask of [false,true])for(const keys of [[13],[199,13],[199,110,101,119,13],[199,1],[199,4]]) {
+ for(const mask of [false,true])for(const keys of [[13],[7,13],[7,110,101,119,13],[7,1],[7,4]]) {
   x=run({entry:'set_pass',mask,keys,setup:m=>put(m,S.var_pasw,'Secret')});
   const cancel=keys.at(-1)!==13,expected=cancel?'Secret':keys.length===1?'Secret':keys.length===2?'':'new';
   assert(str(x.u.m,S.var_pasw)===expected&&x.cancelled===cancel,'password confirmed/empty/cancelled '+mask+'/'+keys);
@@ -78,7 +80,7 @@ function inputEditorRegression(makeCpu,image,bios,S) {
  if(!S.set_hgfx_ink_planar)for(const mask of [false,true]) {
   x=run({entry:'set_pass',mask,realDraw:true,keys:[8,12,90,13],setup:m=>put(m,S.var_pasw,'Secret')});assert(str(x.u.m,S.var_pasw)==='SecrZt','real ZX character renderer preserves editor registers and masking');
  }
- for(const [entry,field,value] of [['change_host','host_url','old.host'],['set_user','var_user','old-user'],['set_filename','var_name','file.bin']])for(const keys of [[13],[199,110,13],[199,1],[199,13]]) {
+ for(const [entry,field,value] of [['change_host','host_url','old.host'],['set_user','var_user','old-user'],['set_filename','var_name','file.bin']])for(const keys of [[13],[7,110,13],[7,1],[7,13]]) {
   x=run({entry,keys,setup:m=>put(m,S[field],value)});
   const cancel=keys.at(-1)!==13||keys.length===2;
   assert(str(x.u.m,S[field])===(cancel||keys.length===1?value:'n'),'setter preserves/changes current value '+entry+'/'+keys);
@@ -91,7 +93,7 @@ function inputEditorRegression(makeCpu,image,bios,S) {
  }
  // The actual command builder must send an empty PASS without a 65536-byte LDIR.
  for(const mask of [false,true])for(const mode of [1,2]) {
-  let u,wire,keys=[199,13];const stop={};
+  let u,wire,keys=[7,13];const stop={};
   u=makeCpu([],bios,S,{image,hook:(pc,r)=>{
    if(pc===S.WTKY)return {ret:true};
    if(pc===S.CHAR)return {ret:true,hl:(r.hl&0xff00)|((r.hl+1)&255)};
@@ -108,7 +110,7 @@ function inputEditorRegression(makeCpu,image,bios,S) {
  }
  // Exercise the actual automatic/manual login path, not only separate helpers.
  for(const manual of [false,true]) {
-  let u;const wires=[],queue=[13,199,13],stop={};
+  let u;const wires=[],queue=[13,7,13],stop={};
   u=makeCpu([],bios,S,{image,hook:(pc,r)=>{
    if(pc===S.WTKY||pc===S.print_ez1||pc===S.clear_edit_zone)return {ret:true};
    if(pc===S.CHAR)return {ret:true,hl:(r.hl&0xff00)|((r.hl+1)&255)};

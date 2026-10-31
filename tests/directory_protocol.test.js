@@ -15,11 +15,6 @@ function directoryRegression(makeCpu,image,bios,S) {
   assert(r.a===value&&r.z===false,'ready byte including NUL '+value);
   assert(r.bc===0x1234&&r.de===0x5678&&r.hl===0xabcd,'preserve parser registers');
  }
- // Partial match at timeout was incorrectly reported as success by look_on_fly.
- for(const text of ['O','OK','OK\r']) {
-  let u=cpu();u.rx.push(...bytes(text));
-  assert(!u.call(S.look_on_fly,{hl:S.ok}).z,'incomplete OK is not success: '+text);
- }
  for(let gapAt=0;gapAt<=4;gapAt++) {
   let u=cpu(),input=bytes('OK\r\nNEXT');input.splice(gapAt,0,...Array(1300).fill(null));u.rx.push(...input);
   assert(!u.call(S.check_module_answer,{hl:S.ok}).carry,'fragmented OK');
@@ -36,8 +31,8 @@ function directoryRegression(makeCpu,image,bios,S) {
   assert(str(u.m,S.RX_buf).length===127&&u.m[S.TX_buf]===0xa5,'bounded line buffer');
  }
  for(const n of [1,10,128,2048,65535]) {
-  let u=cpu();u.rx.push(...gap(n+':DATA',5));
-  assert(u.call(S.ftp_read_length).hl===n,'fragmented decimal length '+n);
+  let u=cpu();u.rx.push(...gap('+CIPRECVDATA,'+n+':DATA',5));
+  assert(u.call(S.at_wait_data).hl===n,'fragmented decimal length '+n);
   assert(String.fromCharCode(...u.rx.filter(x=>x!==null))==='DATA','length leaves payload');
  }
  {

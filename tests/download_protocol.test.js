@@ -18,7 +18,7 @@ function downloadProtocolRegression(makeCpu,image,bios,S) {
    if(pc===S.set_3_5mhz)return {ret:true};
    if(pc===S.delete_file){deleted++;return {ret:true};}
    if(pc===S.save_close){saved++;return {ret:true};}
-   if(pc===S.clear_rece_buf||pc===S.upl_old_read_reply||pc===S.ful_abort||pc===S.send_abort)throw Error('old receive/abort path used');
+   if(pc===S.clear_rece_buf||pc===S.ful_abort||pc===S.send_abort)throw Error('old receive/abort path used');
    if(pc===S.passive_receive_off){assert(closed,'close data before changing receive mode');off++;return {ret:true};}
    if(pc===S.ful_abort_done){done=true;throw stop;}
    if(pc===S.send_string){const command=text(r.m,r.hl);wire.push(command);

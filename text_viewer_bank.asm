@@ -49,6 +49,7 @@ text_viewer_control:
         push    hl              ; target bytes still missing
         call    data_available_in_module_file
         pop     de
+        jp      c,.abort        ; user cancellation during a temporary data pause
         jr      z,.read_error
         or      a
         sbc     hl,de

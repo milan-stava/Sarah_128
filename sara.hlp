@@ -2,28 +2,54 @@ SARAH 128 - KEY HELP
 ===================
 
 CS = CAPS SHIFT, SS = SYMBOL SHIFT
+BREAK = CS+SPACE, DELETE = CS+0
+Arrows: CS+5 left, CS+8 right, CS+7 up, CS+6 down.
 
-DIRECTORY
----------
+1) WITHOUT AN FTP CONNECTION
+---------------------------
+Settings and local functions do not need an FTP login.
+L and SS+L start the connection rather than require one.
+
+F           Set the default file name for SS+D
+T           Set file start address (BS-DOS, not ESXDOS)
+A           Toggle automatic login when Sarah starts
+H           Set FTP host
+E           Set user name
+P           Set password
+SS+P        Toggle password visibility
+N           Select LIST / NLST for the next directory read
+SS+N        Select abbreviated / full listing
+W           Set Wi-Fi on/off when quitting Sarah
+V           Save the application with its settings
+Q           Quit; Wi-Fi state follows W
+G           Choose a CFG profile (BS-DOS)
+K           Read local sara.hlp (BS-DOS)
+L           Start manual login; enter user and password
+SS+L (=)    Start automatic login using configured values
+CS+L        Not assigned in the main screen
+
+CACHED DIRECTORY (NO FTP COMMANDS)
+---------------------------------
+These keys need a directory already loaded into memory.
+
 Up / Down   Move the cursor
 Left/Right  Change directory page
-ENTER       Open directory or supported file
-BREAK       Go to parent directory
-I           Find an item
-X           Scroll a long item name
-SPACE       Mark or unmark the item
-CS+M        Mark all items
-SS+M        Unmark all items
-R           Read the directory again
-6           Rename the item
-7           Create a directory
-DELETE      Delete the item
-N           Switch LIST / NLST
-SS+N        Switch abbreviated / full listing
-Z           View any file as text
+SPACE       Toggle the current item's mark, then move down
+CS+M        Mark all real items (except the parent '..')
+SS+M (.)    Unmark all items
+I           Find text in names and mark matching items
+            Searching replaces the previous marks
+X           Enter long-name scrolling (X right, Z left)
 
-TEXT VIEWER
------------
+LONG FILE NAMES
+---------------
+X           Start scrolling a name longer than the row
+X / Z       Scroll the name right / left
+Other key   Leave scrolling and perform that key's action
+Z opens text only outside long-name scrolling.
+
+TEXT VIEWER (AFTER LOADING)
+--------------------------
 Left        Previous screen
 Right       Next screen
 BREAK       Return to Sarah
@@ -35,30 +61,65 @@ Non-printable bytes appear as dots. TAB is one space.
 Files over 65535 bytes are shown only up to that limit.
 A warning is displayed before downloading a large file.
 
-FTP AND SETTINGS
-----------------
-L           Log in
-SS+L        Automatic login sequence
+INPUT EDITOR
+------------
+Left/Right  Move the cursor
+CS+0        Backspace: delete before the cursor
+CS+9        Delete the character at the cursor
+CS+1 (EDIT) Clear the whole input field
+ENTER       Accept the value, regardless of cursor position
+BREAK      Cancel and keep the previous value
+CS+3        Also cancels input
+
+2) WITH AN FTP CONNECTION
+------------------------
+These operations communicate with the FTP server.
+No directory is needed to enter a file name manually.
+
 O           Log off
-H           Set FTP host
-E           Set user name
-P           Set password
-SS+P        Toggle password visibility
-A           Toggle automatic login
-F           Set default file name
-T           Set file start address
-S           Show file size
-U           Upload
-D           Download selected / marked files to disk
+S           Show file size; enter the name
+U           Upload a local file; enter its name
 CS+D        Download a file by entering its name
 SS+D        Download the default file
-B           Abort a running download
 C           Send an FTP command
-G           Choose a CFG profile; ENTER logs in (BS-DOS)
-K           Open local sara.hlp (BS-DOS, no FTP needed)
-W           Toggle Wi-Fi state on exit
-V           Save the application
-Q           Quit Sarah
+R           Read the directory again
+7           Create a directory
+
+WITH A LOADED DIRECTORY
+-----------------------
+ENTER       Open directory or supported file under cursor
+BREAK       Go to the parent directory
+D           Download marked files, or the item under cursor
+6           Rename the item
+DELETE      Delete marked items, or the item under cursor
+Y / N       Confirm / cancel deletion
+Z           Download any file for viewing as text
+
+D and DELETE use marks first; without marks they use cursor.
+
+DURING TRANSFERS
+----------------
+B           Abort a running file download or upload
+BREAK       Interrupt directory reception
+
+CFG PROFILE SELECTION (BS-DOS)
+-----------------------------
+G           Open the profile list
+Up / Down   Preview and select a profile
+ENTER       Keep the profile and perform SS+L login
+BREAK       Restore the previous profile; do not log in
+If connected elsewhere, SS+L can ask about reconnecting.
+Y           Reconnect when asked
+N / B       Decline reconnecting
+
+UPLOAD CHOICES
+--------------
+O           Overwrite the existing file
+A           Append to the existing file
+N           Create a new file using STOU
+CS+1 (EDIT) Cancel the file-exists choice
+B           Abort
+Upload is still under development.
 
 OPENING FILES (BS-DOS)
 ---------------------
@@ -66,6 +127,8 @@ ENTER on TAP downloads, extracts and starts the program.
 The original TAP is currently kept after extraction.
 ENTER on SNA / Z80 downloads and hands it to the NMI menu.
 An unsupported NMI menu shows a message and returns.
+ENTER also previews supported 6144/6912-byte screen files.
+Press a new key to leave the screen preview.
 
 Keep sara.hlp next to sara.cfg on the current BS-DOS disk.
 Press K to open it, Left/Right to browse and BREAK to return.

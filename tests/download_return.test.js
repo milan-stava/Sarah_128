@@ -25,7 +25,7 @@ function downloadReturnRegression(makeCpu,image,bios,S) {
   const stop={},u=makeCpu([],bios,S,{image,hook:(pc,r)=>{
    if(pc===S.send_type_command_i)return {ret:true};
    if(pc===S.ldir_names)throw stop;
-  }});u.m[S.flag1]=32;put(u.m,S.mark_counter,2);put(u.m,S.cur_item_addr,0xc456);
+  }});u.m[S.flag1]=32;u.m[S.flag_dir]=1;put(u.m,S.mark_counter,2);put(u.m,S.cur_item_addr,0xc456);
   try{u.call(S.ftp_download_file_dir);}catch(e){if(e!==stop)throw e;}
   assert(word(u.m,S.cur_item_adr_tmp)===0xc456,'bulk snapshot taken before directory scan');
  }

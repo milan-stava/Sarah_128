@@ -80,3 +80,7 @@ Run after the BSDOS build:
 
 Node is unavailable here; the same regression function was executed in the
 JavaScript tool runtime with the assembled images for all three variants.
+
+2026-10-31: EDIT/CS+1(code7) now clears the field, replacing SS+Q(code199).
+BREAK cancellation unchanged; key-code substitution costs zero assembled bytes.
+Updated input and FIND tests pass, including actual EDIT keyboard matrix.

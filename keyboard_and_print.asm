@@ -929,7 +929,7 @@ IN_CHECK_END:
         cp   13
 		jr	z,IN_END
 ;         ret  z
-         cp   199
+         cp   7                       ; EDIT (CS+1) clears the whole field
          jp   z,INPUT
          ld   hl,IN2
          push hl

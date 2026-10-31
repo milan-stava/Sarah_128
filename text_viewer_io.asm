@@ -2,7 +2,7 @@
 ; No file creation, writes or deletion are used by this viewer.
 text_viewer_fixed_start:
 view_as_text:
-        bit     5,(ix+0)
+        call    ftp_item_ready
         jr      z,.ignore
         call    send_type_command_i ; destroys INPBUFF: prepare filename AFTER it
 .ready:                         ; ENTER has already sent TYPE I

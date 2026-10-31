@@ -1,7 +1,7 @@
 ; Prijem FTP nezavisly na mezerach mezi bajty UART. Bez zmeny BIOSu.
 ; Chyba 48 = timeout UART/AT odpovedi, 49 = neplatne ramovani/odpoved.
 
-; Vstup: zadny. Vystup: A=bajt, NZ; timeout jde do error_handler (48).
+; OUT A=byte/NZ. Normal AT waits time out (48); pending upload ACK waits for B/data.
 ; Meni: AF. Zachovava BC, DE, HL, IX, IY i alternativni registry.
 ftp_read_byte
         push bc
@@ -27,6 +27,13 @@ ftp_read_byte
         ld a,b
         or c
         jr nz,.wait
+        ld a,(ftp_upload_wait)
+        or a
+        jr z,.tick
+        call ftp_poll_cancel    ; raw key read, no debounce delay in the UART receiver
+        jp c,ftp_upload_cancel
+        jr .wait                ; silence alone cannot cancel an in-flight TCP send
+.tick
         dec de
         ld a,d
         or e
@@ -38,6 +45,22 @@ ftp_read_byte
         ret
 ; Comparable polling time at 3.5 / 7 / 14 / 20 MHz (not a hardware clock).
 ftp_timeout_scales db 8,16,32,46
+ftp_upload_wait db 0
+
+; Shared pause cancellation for upload ACK and download data availability.
+; C=B pressed; BC/DE/HL preserved. Ordinary pauses never retransmit a payload.
+ftp_poll_cancel:
+        call inkey              ; INKEY itself preserves BC/DE/HL
+        cp "b"
+        scf
+        ret z
+        or a
+        ret
+ftp_upload_cancel:
+        xor a
+        ld (ftp_upload_wait),a
+        ld c,20
+        jp ful_abort            ; nonreturning upload abort unwinds the pending wait
 
 ; HL=vzor, porovnani se zacatkem RX_buf. Z=shoda, DE=za prefixem.
 ; Meni AF, DE, HL, zachovava BC.
@@ -231,29 +254,6 @@ ftp_active_reply
         ldir
         pop hl
         ret
-
-ftp_read_length
-        ld hl,block_asci
-        ld b,5
-.next   call ftp_read_byte
-        cp ":"
-        jr z,.done
-        cp "0"
-        jp c,ftp_frame_error
-        cp "9"+1
-        jp nc,ftp_frame_error
-        ld (hl),a
-        inc hl
-        djnz .next
-        call ftp_read_byte
-        cp ":"
-        jp nz,ftp_frame_error
-.done   ld (hl),0
-        ld a,b
-        cp 5
-        jp z,ftp_frame_error
-        ld de,block_asci
-        jp at_parse_decimal
 
 ; Byte ridiciho FTP streamu v pasivnim rezimu. AT obalky se nectou jako data.
 ; Buffer prezije mezi 150 a 226, i kdyz oba kody prijdou v jednom bloku.

@@ -136,6 +136,16 @@ function wifiInitializationRegression(makeCpu,image,bios,S) {
   assert(changed===(oldReply.startsWith('ERROR')||oldReply.startsWith('busy')?0:1),'reject before changing UART');
   if(!error)assert(commands[1]==='AT\r\n','new baud positively verified');
  }
+ // Follow the configured startup preference from an already aligned 3456000 UART.
+ {
+  let u,changed=0,commands=[];
+  u=cpu({hook(pc,r){
+   if(pc===S.set_print_speed){changed++;assert(r.a===12,'install 1152000 host baud');return {ret:true,carry:false};}
+   if(pc===S.send_string){commands.push(str(r.m,r.hl));u.rx.push(...bytes('OK\r\n'));return {ret:true,z:true};}
+  }});u.m[S.flag1+8]=23;
+  assert(!u.call(S.set_ud_speed,{de:16<<8}).carry,'startup preference negotiates lower modem baud');
+  assert(changed===1&&commands.join('|')==='AT+UART_CUR=1152000,8,1,0,0\r\n|AT\r\n','change ESP then host and verify AT');
+ }
  for(const early of [false,true]) {
   for(const greeting of ['220 Ready\r\n','120 Later\r\n220 Ready\r\n',
                          '220-first\r\nintermediate\r\n220 Ready\r\n']) {

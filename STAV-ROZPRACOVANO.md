@@ -1,4 +1,637 @@
+## POTVRZENO UZIVATELEM:1152000baud/7MHz upload prochazi
+
+Uzivatel po navratu potvrdil, ze nizsi1152000 pri7MHzupload prochazi.
+Nyni pozaduje dalsitest2304000baud+20MHzCPU, dva uploady.
+Nejprve ukladame drive zadany lokalni checkpointcommit overene1152000verze.
+SNA/Z80 uzivatelem overeneOK, TAPdelete/run/stayswitche staleTODO.
+Uploadpri vysokychrychlostech zustava rozpracovany. Push neni pozadovan.
+Dalsikrok po tomto commitu: pripravit2304000/20MHz, pauzu>zachovat~20ms,
+overit a datNOVOUtestTAP naFTP. NemenitHGFX.
+## AKTUALNI31.10.2026: baud1152000, lokalni checkpointcommit
+
+Pauza20msnepomohla: nova guardTAP stazena session63 14:13:08.
+STORGAUNT3 session63 14:14:22/150, progress213530, bez226.
+70bloku143360B ven, server141312B, SHA256prefixshodny. Poslednidata13:14:38.444UTC.
+Uzivatel vyslovne zadal snizitbaud a commit s rozpracovanymuploadem,
+SNA/Z80OK, TAPswitcheTODO. Push nyni nezadal.
+
+Hotovo: ud_speed16->12, default1152000 misto3456000. Datazustava7MHz,
+prompty/ACK20MHz. Sviceni20MHz pri cekani je zamerny stav, neni to DATAclock.
+Pauza20ms i Bcancelzustaly. Zmena0B navic, volno predBFE0=5989B,
+biosA65B/konecA87B, banka6B8E2958B. HGFX OFF.
+Oba preklady0errors/0warnings,44regresi705008assertions0failures.
+Startupregrese overilaAT+UART_CUR1152000 a nasledneAT pri novemUARTindexu.
+Srovnani predchoziguardbinarky: jedina zmena mainbajt#8E61 16->12,
+banka6identicka. Hardware novybaud jeste NEOVEREN.
+SNA/Z80 uzivatelem potvrzenoOK. DokoncitTAPvolby smazat/spustit/zustat pozdeji.
+STOU/N tento mistniFileZilla odmita500 unsupportedcommand (samostatny limit).
+Audit tests/upload-baud-audit.md.
+
+NovaTAP i D:/zx/SARA_LOADER.tap, shodaSHA256 overena:
+A72E2D0FA35D53530D6FBE40ACE9F3A2B7A4276BA20767B1885F1403CA78EBC4.
+Zaloha predchoziFTPkopie:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-baud-test-20261031-131806.tap.
+COM6stara session63794/capture125050 zastavena581849B.
+COM6NOVY READY1152000Bd8N1 receive-only, session81387, limit1800s od13:18:13UTC
+(14:18:13Praha), temp/sara-uart-20261031-131813/. Stop souborem stop.
+EL/stazeni mohou jestebezets puvodnimbaud, spravnyodposlech aznovaSara1152000.
+Scriptcapture ma take1152000default.
+
+Dalsi krok: uzivatel noveSare overi1152000 naobrazovce, dvaGAUNT3uploady,
+226/celavelikost/obsah/navratadresare a pripadneB. ZatuhlyESPpredtestemobnovit.
+Tento checkpoint ukladan lokalnimcommitem jakoROZPRACOVANE, uploadneni vyreseny.
+## AKTUALNI31.10.2026: testovaci pauza po >, TAP uz na lokalnimFTP
+
+Uzivatel upresnil: nezadaval menu ani baudvolbu; dokoncit rozboruploadu,
+baud az kdyz dalsi pokus selze. Schvalil kratke cekani a vyslovne zadalFTPkopii.
+Pridana pouze5376iteraci pauza poCIPSEND promptu pri7MHz predprvnimDATA
+bajtem (~20ms, bezHALT/preruseni). Hypoteza casovani vstupuESPdoRX,
+NENI prokazana pricina zavad ani povinna pauzaESPspecifikace.
+UART index16/3456000, DATA7MHz, prompty/ACK20MHz, blok2048 BEZEZMENY.
+Zadna dalsi zmena wait/recovery/menu/reset. Dalsi baudtest1152000 az potom.
+
+44regresi705002assertions0failures, navicTAPhandoff1067.
+Oba normalnipreklady0errors/0warnings, HGFX OFF.
+Zmena+8BpodC000: biosA653->A65B, konecA87B, volno5997->5989B.
+Banka6bezezmenyB8E2958B. TAP27733B. Audit tests/upload-prompt-guard-audit.md.
+Aktualni NMIadresy proNOVOUtap: upload_last_event64EC, RX_buf8E8A.
+Drive namereneNMI (64E4/8E82) patrilo predchoziHWverzi.
+
+D:/zx/SARA_LOADER.tap aktualizovana, SHA256overen protiworkspace:
+8B1FE9AE294075464F87E16BBC0E338359D27DB64565181A120489B52B287055.
+Predchozikopie zaloha
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-prompt-guard-20261031-131129.tap.
+ZadnyCFGkopirovan. Zadnycommit/push.
+Dalsikrok: uzivatel nacteNOVOUtap, funkcnimodulem dvaGAUNT3uploady,
+overit226 a navratadresare; dalsi pripadnyvytuh diagnostikovat. Pakmoznybaudtest.
+COM6session63794 capture125050, limit13:20:50UTC (14:20:50Praha);
+pred dalsim tvrzenim oaktivite overit/obnovit.
+## AKTUALNI31.10.2026: rychlosti NEMENIT, upresnit nastaveni
+
+NMI doplneni uzivatele: #64E4=00, slova zasobniku oddrive SP5FE4:
+8500,9E03,0FFF,7F20,A174 (uvedl jako SP=...; bereme jako obsah zasobniku).
+9E03 je navrat z rece_byte do ftp_read_byte; A174 navrat do at_next_event.
+0FFF a7F20 zapadaji do cekani parseru po mezere vyzvy. Posledni udalost0:
+cekani na potvrzeni posledniho bloku se nevratilo. Neprokazuje pricinuUART/TCP.
+
+Uzivatel navrhl pouze jako napad UART1152000 priCPU7MHz (nyniUART3456000,
+DATA7MHz, cekani20MHz). Zatim zadna zmena. Nasledne vyslovne rekl
+rychlost zatim nemenit a udelat nastaveni. Neni jasne ktere nastaveni:
+polozena otazka baudvolba versusdrive odlozeneTAPvolby. CEKA se upresneni.
+Neimplementovat snizeni rychlosti ani odhadovat jine nastaveni bez odpovedi.
+## NMI31.10.2026 pro progress279066
+
+Uzivatel dodalPC=A72B SP=5FE4, RX#8E82:
+4F4B0044204F4B003820627974657300636365...
+= OK\0 +stareD OK\0 +stare8 bytes\0. Odpovida postupnemu prepisu
+Recv2048bytes -> SEND OK -> OK, neni to jeden aktualniFTPtext.
+Bios_startA653, A72B=offsetD8 (PUSH DE v rece_byte, hned poPUSH BC).
+Je tedy v BIOSUARTreceiveru; presneho volajiciho musi potvrditzasobnik.
+#64E4 uzivatel dosud nedodal. Pozadan bajt#64E4 a6slovodSP5FE4.
+NMI nedokazuje, zda ESP nedostalo celypayload, ztratila seUARTodpoved, nebo
+stale cekaTCP; nedelat ztoho jistouWiFizavadu. Beznovychzasahu do kodu.
+## HW31.10.2026: jeden GAUNT3 dokoncen, druhy stoji279066
+
+Uzivatel hlasil New/STOU Transfer aborted, pak smazani stareho souboru proslo.
+Vlogu stara session56 ukoncena Administrator13:52:13. Nasledny cistySTOR:
+session61 13:52:42 GAUNT3.TAP150 ->13:53:17 skutecne226, TYPEA/PASV/LIST226,
+PWD257 ve13:53:18. Capture125050 prvniSTOR offset2610:169CIPSEND1,
+deklarovano344602B, uzavreni1, bezCIPCLOSE5. Jeden upload tedy dolozene
+dokoncil server a dosel zpet k adresari. Neprokazuje vyreseni prerusovanehoWifi.
+
+DruhySTOR stejnasession61 13:53:51/150, bez226 pri kontrole.
+Uzivatel progress279066 a vytuh. Capture poslednidata12:53:58.393UTC,
+36uplnychbloku=73728B, serverpartial71680B se shodnymSHA256prefixem.
+Za poslednim blokem zadnyATprikaz, zadnyCIPCLOSE; cekani zustava aktivni.
+Pozadan NMI PC/SP, bajt#64E4 a prvnich16B od#8E82 (aktualniTAP!).
+Noveadresy: ftp_upload_wait#9E29, at_closed#A4D6, ftp_last_error#7F27.
+Cekame naNMI; predtim nedavatB anireset, aby se stav neztratil.
+COM6 session63794 capture125050, limit13:20:50UTC.
+## COM6 ZNOVU READY31.10.2026
+
+Predchozi session43581 skoncila limitem,335959B. Na dotazuzivatele znovu
+zapnutCOM6 3456000Bd8N1 receive-only, READY, session63794.
+Capture C:/Users/milan/AppData/Local/Temp/sara-uart-20261031-125050/.
+Limit1800s od12:50:50UTC (13:50:50Praha). Stop souborem stop v tomtoadresari.
+
+## HW TEST31.10.2026: tentokrat server odmitl cilovy soubor550
+
+Uzivatel po uploaduGAUNT hlasi ze se nicnestalo. Logoveren:
+session57 13:41:48 STOR GAUNT3.TAP ->150 a hned550 can't access file.
+ABOR226, reconnectsession58 USER/PASS230, LIST226/PWD257.
+Druhy pokus session58 13:42:06 stejnySTOR150/550, ABOR226,
+reconnectsession59 USER/PASS230, LIST226/PWD257 ve13:42:08.
+Toto neni potvrzeni uspechu velkehouploadu ani test dlouhe pauzy.
+ServerpartialGAUNT3 stale309248B, atributArchive (neniReadOnly).
+Stara session56 z minuleho zamrzleho uploadu vlogu dosud bezdisconnect/226;
+mozny lock cilovesouboru, zatim neprokazany. Zadne odpojovani ani mazani.
+COM6zachytil2 CIPSEND1,2048 (kratke pokusy),2CIPCLOSE5 a nasledne prikazy.
+Dalsi krok zkouset jiny/unikatni cil (volbaN/STOU pri existujicim souboru),
+pripadne uzivatel uvolni starouFTPsession56. Velkyprenos stale ceka overeni.
+## NOVA TAP NA FTP31.10.2026: cekani bez pevneho limitu pri pauze
+
+D:/zx/SARA_LOADER.tap aktualizovana, shodaSHA256 s workspace overena:
+2AF5BDD1F443D6B3F890A774A8240A7FB7E7A5C2A6A5DCAEEC7E3ECB6B38A5EB
+Zaloha predchozi testovane verze:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-cooperative-wait-20261031-123112.tap.
+Na realnem stroji nove cekani jeste NEOVERENO. Predtestem musi byt modul
+opet funkcni (uzivatel hlasil zatuhnuti a neuspesne hledani rychlosti).
+
+## AKTUALNI31.10.2026: cekat a pokracovat bez odpojeni pri samotnem tichu
+
+Uzivatel po dalsim48 rekl, ze novy startSary pomalu hledal rychlost a zadnou
+nenasel, modul asi potrebuje reset. Pak vyslovne upresnil: idealne pockat a
+pokracovat v prenosu jakoPC. Dokoncena tato politika cekani:
+- Upload po plne odeslanem bloku ceka naSEND OK bez casoveho odpojeni.
+  B pravidelne cte INKEY; nic znovu neposila, zadneATbehem cekani.
+  PotvrzeneERROR/SEND FAIL/busy/CLOSED/WIFI DISCONNECT stale znamena chybu.
+- Download platnou prazdnou odpoved naCIPRECVLEN opakuje s pauzou az do dat,
+  closed neboB. Bez poctoveho limitu2048, stale konecna kontrola fronty priCLOSED.
+- BeznaATodpoved (take kazdyCIPRECVLEN dotaz) ma dal timeout; mlcici modul
+  neni povazovan za platnou prazdnou odpoved.
+- Nepridan nepodmineny reset, ten by zrusil relaci. Skutecne zatuhnutiESP
+  neni timto prokazane vyreseno. Obnova po ztrateTCP neni resumeuploadu.
+
+Oba preklady0chyb/varovani, HGFX OFF;44regresi704334assertions,0failures.
+Upload1910BSD/181ESX, pause76/build. Test i celeho32768Buploadu s pauzou
+2200000UARTpolls a pokracovanim bezreplay, download4096prazdnych dotazu.
+Audit tests/transfer-pause-audit.md (nova sekce nahore).
+Velikost podC000 dalsi-24B proti posledniHWverzi:
+A66B->A653, konecBIOS A873, volno predBFE0=5997B (bylo5973).
+Celkem-321B protiA794. Banka6 bezezmenyB8E=2958B. ESX take-24B.
+NovaSARA_LOADER.tap zatim ve workspace; FTPkopii aktualizovat poovereniSHA.
+Bezcommitu/pushe. Dalsikrok: nahrat novouTAP, modul predtestem uvest do
+funkcniho stavu, zkouset kratky a pakGAUNT3 upload s pauzou, B, download.
+COM6 session43581 limit1800s od12:19:52UTC; aktivitu predtestem overit.
+## DOPLNENI HW TESTU: potvrzen timeout48
+
+Uzivatel potvrdil48. Po CIPCLOSE5 capture daleobsahuje CIPSTATUS a AT,AT;
+novy USER/PASS/LIST v tomto useku neni. LokalniFTPlog stale konci session56
+STOR/150; nelze potvrdit uspesnou obnovu adresare. Zjistit aktualni stav UI.
+Dalsi prodluzovani cekani neni dolozene reseni priciny.
+Aktualni diagnostika v nove TAP: upload_last_event #64E4, ftp_last_error #7F27,
+RX_buf #8E92, ftp_upload_wait #9E41 (starsi adresy z chatu NEPOUZIVAT).
+
+## HW TEST 31. 10. 2026: upload opet zastavil, zbyva49690
+
+Nova TAP stazena z FTP (session56 SIZE27733/RETR150/226 ve13:20:23-24).
+UploadGAUNT3 session56 STOR13:20:44/150, bez226 pri kontrole.
+Capture121952:152 uplnych2048B bloku=311296B; posledni data12:21:27.801UTC.
+Serverpartial309248B, SHA256 shodny s odchozim prefixem teto delky.
+Posledni jeden blok navic vUARTu nez vserverpartial; neni dokazano ztraceni.
+V12:23:40.789UTC dalsich15B po132.988s, tj.prodlouzene cekani4x opravdu
+probehlo, ale prenos neobnovilo. Overeny prikaz AT+CIPCLOSE=5 (obnova).
+Uzivatel hlasi stejny vytuh/zbyva49690. Presnou ESP odpoved stale nemame,
+jen odchozi smer. Uzivatel POTVRDIL chybu48 na konci. Zadna dalsi uprava kodu.
+COM6 session43581 stale nahrava s limitem1800s od12:19:52UTC.
+## COM6 ZAPNUT 31. 10. 2026 pro test nove TAP
+
+Na pokyn uzivatele: COM6 3456000 Bd 8N1 receive-only, READY.
+Exec session43581, limit1800s od12:19:52UTC (13:19:52 Praha).
+Capture C:/Users/milan/AppData/Local/Temp/sara-uart-20261031-121952/.
+Ukonceni souborem stop v tomto adresari. Uzivatel spousti EL a stahuje novou Saru.
+
+## PREDANO K TESTU 31. 10. 2026: pauzy prenosu
+
+Nova overena SARA_LOADER.tap je i na D:/zx/SARA_LOADER.tap.
+SHA256 DAEBC52B13838B33D5866BE78E5E4E22B2B7C21D94DD1E8DF219B649D04BE39A
+27733B, shoda s workspace overena. Predchozi kopie zalohovana:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-pause-fix-20261031-115423.tap.
+Nahrat tuto novou verzi pred dalsim uploadem. Nekopirovan CFG ani jine soubory.
+COM6 session96429 skoncila na automatickem limitu, STOPPED148934B.
+COM6 je nyni OFF; pred dalsim testem znovu otevrit podle domluvy.
+## AKTUALNI 31. 10. 2026: pauzy prenosu, hotovo pro novy HW test
+
+Uzivatel zadal pokracovat, odolne cekani pri slabem spojeni i pro download,
+sdilet co jde, minimalizovat bajty a odstranit nepouzite stare vetve.
+Posledni HW test pred touto upravou: session53/STOR GAUNT3.TAP/150,
+63 odchozich bloku=129024B; server v tu chvili126976B. Pak asi33.28s pauza,
+CIPCLOSE5 a obnova. Uzivatel229914 zbyva, nakonec48. Bez226.
+USB zachycuje jen odchozi smer; pricina prvniho chybejiciho ACK neprokazana.
+Slabe spojeni bylo zamerne.
+
+Hotovo: upload SEND OK ceka4x dele (jen tato faze), B muze cekani zrusit.
+Zname CLOSED/WIFI DISCONNECT jej ukonci. Download prazdny buffer nepovazuje
+za EOF: paced dotazy az2048, konec az prazdno+closed s posledni kontrolou.
+B ma oddeleny navrat pro disk/screen/TXT; uklid pres existujici ABOR.
+Timeout jde do existujici jednorazove obnovy. Zadny replay dat ani FTP resume.
+Opraveny take dva32bit testy rest_len (65537/131074 nesmi byt nula).
+Odstraneny ftp_upload_legacy.asm, prepinani jeho rezimu, stary parser,
+look_for_ipd/look_on_fly, jejich decimalni helper a nepotrebne retezce.
+
+Pri cisteni zachytil assembler prilis siroke odstraneni zdroje. Obnoveno,
+vraceny i dosavadni guards/FIND/screen/recovery upravy. Zadne chybne
+mezisestaveni nepredano naFTP. Znovu overeny vsechny regrese a chybejici
+symboly proti predchozi dobre binarce (jen zamerny legacy ubytek).
+Oba preklady0 chyb/varovani, HGFX OFF. 44 testbehu704319assertions,
+navic TAP handoff1067. Nove pause69/build, upload1909BSD/181ESX.
+Audit tests/transfer-pause-audit.md. Novy HW test stale CEKA.
+
+Velikost oproti naposledy testovane TAP: podC000 -297B,
+BSD bios_start A794->A66B, konecBIOS A88B, volno predBFE0 5676->5973B.
+Banka6 B8B->B8E=2958B (+3B). SARA_LOADER.tap27733B.
+ESX stejna uspora297B, banka+3B. Priorita stale BSDOS, pakESX, pakHGFX.
+
+Uzivatel potvrdil SNA/Z80 na stroji. Pozdeji: nastaveni TAP spustit/smazat/
+zustat v Sare; take precedence CFG cilove relace proti jiz existujici relaci.
+Tyto dve veci nyni NEMENIT. Indikator poradi polozky stale odlozen.
+Dalsi krok: nova TAP z FTP, kratky upload, GAUNT3, druhy upload;226, velikost,
+obsah a navratadresare. Pak slaba sit/B a downloadpauza. Bezcommitu/pushe.
+COM6 session96429 overena jako bezici pri dokoncovani; limit1800s od11:24UTC.
+Capture temp/sara-uart-20261031-112400. Pred tvrzenim ze stale bezi overit.
+FTPkopii aktualizovat az po testech, zaloha starekopie a shodaSHA256.
+## Zivy COM6 capture31.10.2026 pro novou uploadovou verzi
+
+Na vyslovny pokyn uzivatele znovuzapnutCOM6,3456000 Bd8N1, receive-only.
+Exec session96429,READY,limit1800s od2026-10-31T11:24:00Z.
+Zaznam C:/Users/milan/AppData/Local/Temp/sara-uart-20261031-112400/
+rx.bin,chunks.jsonl,settings.json; stop pres soubor stop v adresari.
+TestovatNOVOU TAP z FTPkopieD:/zx/SARA_LOADER.tap (spolecnyreceiver,
+20MHzACK,7MHzDATA,EDIT), nepredchozi nactenou verzi. Predchozi8170skoncila.
+
+## DOKONCENO31.10.2026: nova testovaci TAP i na lokalu FTP
+
+Po vsech testech nahrana aktualni SARA_LOADER.tap take doD:/zx/SARA_LOADER.tap
+(povolena eskalace pro zapis mimo workspace). SHA256 overeny se workspace:
+6EE99D3AB8FF68B1946575DE924AE7FACD4A868D7B4B666713A703A803C6C02B.
+Stara FTPkopie zalohovana do temp:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-upload-fix-20261031-112059.tap.
+Ta nova kopie obsahuje spolecny upload receiver,20MHz ACK/7MHz DATA,
+jasny offlineobraz po chybe, EDITclearing. +43B, volno5676 B.
+Normalni callerFTPloader a testscripty jsou hotove; realny upload staleceka.
+COM6 session8170 dosla na automaticky limit1800 s a je ukoncena; ulozeny
+capture103104 obsahuje diagnostiku chyby16/48. Pred dalsim uzivatelskym
+testem znovu otevritCOM6 dle navazujici domluvy; tedport neni drzen.
+Bez noveho commitu/pushe.
+
+## AKTUALNI 31. 10. 2026: nova uploadova vetev a EDIT, ceka realny test
+
+Po potvrzenem navratu z preruseneho uploadu selhal prvni plny GAUNT3.TAP:
+server session52 STOR11:35:07/150,36 bloku=73728 B, bez226. USB pak
+CIPSEND0,6 bez ABOR, uzivatel16 a cekani, potom48. NMI flags D8/00 potvrzuji
+neplatne spojeni/adresar; sipky blokuje flag, stary obraz zustal videt.
+PC nedodan. Skutecny chybejici ESP vysledek stale nezname (USB jenven).
+
+Uzivatel rekl pracovat dale a zadal EDIT mistoSS+Q, spocitat volne misto.
+Hotovo: uploadmode0 sdili AT/activeFTP prijimac. Prompty/SEND OK na20MHz,
+DATAzustava7MHz, UI3.5MHz. Potvrzeni/formalne chyby a fronta FTP jsou
+cteny spolecnym parserem. CloseconsumeOK a pak skutecneFTP226; ABOR
+pokracovani stejnym active-readerem. Chyby16/43 smeruji do jedne obnovy.
+Pri zneplatneni spojeni se smaze stary adresar a vykresli offline stav,
+takze nebudou videt nefunkcni sipky nad starou strankou. Stavove bajty
+upload_last_event/ftp_last_error uchovaji prvni diagnostiku pres uklid.
+
+INPUT: EDIT(CS+1,kod7) nyni vymaze radek; SS+Q uz ne. BREAK stale rusi.
+Aktualizovan sara.hlp a regresni testy včetněskutecne klavesove matice.
+Zmena klavesy sama o sobe0B. Cela nova uprava +43B pod C000, proti
+predchozimu testovanemu sestaveni: bios_start A769->A794, konecA9B4,
+volno predBFE0 5719->5676B. Banka6B8B=2955B beze zmeny.
+Oba preklady0 chyb/varovani, HGFX OFF. Vsechny souvisejici regreseprosly:
+upload1911/183,recovery149,input436,FIND1386 a dalsiFTP/TXT/CFG/screen.
+Audit tests/upload-shared-receiver-audit.md. Hardware zatim NEovereno,
+netvrdit ze upload je definitivne opraven ani ze prijem rychlosti byl pricina.
+
+Aktualni SARA_LOADER.tap ve workspace sestaven. Kopie v D:/zx byla shodna
+se STAROU testovanou verzi, nyni po kompilaci muze byt stara; aktualizaci
+kopie na FTP provest az po testech/zalohovani a overit SHA256.
+COM6 session8170 ma limit1800s od10:31:04UTC; zaznam103104 zustava ulozen.
+Nespoustet nove uploady bez nahrani nove verze; po navratu uzivatele nejprve
+kratky upload, pak GAUNT3 a druhy upload, overit226/velikost/navratadresare.
+Bez commitu/pushe. Priorita BSDOS; indikator poradi stale pozastaven.
+
+## POTVRZENO NA STROJI 31. 10. 2026: obnova po prerusenem uploadu
+
+Uzivatel provedl upload ->NMI ->BS-DOS ->novy start bez Q/resetu Wi-Fi,
+prihlaseni podle nej probehlo OK. Overen USB capture103104 a mistni FTP log.
+Pred restartem35 bloku po2048 B (71680 B), STOR GAUNT3.TAP na lokalu,
+server session51:11:31:43 150, bez226;11:32:03 disconnected.
+USB v offsetu72565 zachytil skutecne AT+CIPCLOSE5, CIPRECVMODE0,
+CIPSTATUS, nove CIPSTART0 na sarah.speccy.cz (vychozi CFG profil),
+USER/PASS, NOOP, TYPE A, PASV, LIST a navrat PWD po docteni adresare.
+Tim je konkretni automaticke odpojeni stare nedokoncene relace a nove
+prihlaseni po restartu POTVRZENE hardwarem, vcetne funkcniho adresare.
+
+Pozdeji capture ukazuje dalsi CIPCLOSE5 v offsetu73718 a nove pripojeni na
+192.168.0.105; mistni server session52 11:32:43 USER/PASS230, LIST150/226,
+PWD257 a nasledny NOOP200. Jde o nasledne dalsi pripojeni, nemichat ho
+s prvnim automatickym obnovenim na vychozi server. Odpovedi ESP stale
+nemame, ale serverovy log a uzivatelske potvrzeni souhlasi s prubehem.
+
+Zbyva plny upload GAUNT3.TAP s novymi cekanimi (ukonceni226, velikost,
+druhy upload, nasledny pruchod adresari). Test umele preruseneho uploadu
+sam o sobe NEpotvrzuje kompletni upload ani vsechny varianty vypadku.
+Kod ani TAPy ted nemenene. COM6 capture session8170 stale muze bezet,
+limit1800s od10:31:04UTC; slozka sara-uart-20261031-103104. Raw obsahuje
+prihlasovaci udaje, nevkladat jej do Gitu ani chatu. Bez commitu/pushe.
+
+## Zivy odposlech 31. 10. 2026: test preruseneho uploadu a noveho startu
+
+Na aktualni dotaz uzivatele zapnut COM6,3456000 Bd8N1 receive-only.
+Exec session8170, READY, limit1800s od2026-10-31T10:31:04Z.
+Vystup C:/Users/milan/AppData/Local/Temp/sara-uart-20261031-103104/
+rx.bin,chunks.jsonl,settings.json; stop pres soubor stop v tomto adresari.
+Plan testu: upload ->NMI ->BS-DOS bez Q a bez navratu do behu Sary,
+pote znovu nacist aktualni SARA_LOADER.tap, Wi-Fi modul/server ponechat
+bez resetu. Overit automaticke uzavreni stare relace a nove prihlaseni.
+Aktualni test zatim bez vysledku. Predchozi capture9053 je ukonceny.
+
+## AKTUALNI 30. 10. 2026: automaticke obnoveni zamrzle FTP relace hotovo
+
+Uzivatel vyslovne zadal opravit36 pri startu nad zamrzlou relaci a aby Sara
+sama odpojila starou relaci a znovu se nalogovala. Implementovano:
+CIPSTATUS eviduje datovy socket1, jeho preziti pri kontrole spojeni vyvola
+obnovu jeste pred NOOP/TYPE/PASV. Chyby4/36/48/49 pouziji stejnou obnovu.
+Obnova invaliduje stav/cache, bounded vycisti stare odpovedi, CIPCLOSE5,
+reset parseru a aktivni prijem, pak existujici auto_login s ulozenymi udaji.
+CIPCLOSE ERROR se toleruje jen po overeni STATUSem, ze0/1 uz neexistuji.
+Zdravou control-only relaci start zachova. Upload se sam neopakuje.
+
+error_recovering:0 normal,1 plain cleanup,2 automatic reconnect. Jen JEDEN
+pokus pres cleanup/prihlaseni/novy adresar. Druhe selhani zobrazi chybu a
+vrati klavesnici; chybne USER/PASS ani uklid uz neroztoci login smycku.
+Ostatni chyby take po uklidu vraci klavesnici, misto opakovani startovaciho
+error_handler_loop. Novy fixed-RAM ftp_recovery.asm, status parser upraven.
+
+Oba normalni loadery sestaveny bez chyb/varovani, HGFX stale OFF.
+Test ftp_recovery 121 kontrol pro kazdou DOS variantu; vsechny souvisejici
+regrese prosly. Podrobnosti tests/ftp-recovery-audit.md.
+Naklad teto opravy +232 B pod C000: bios_start A681->A769,
+konec BIOS A989, volno pred BFE0 5719 B. Banka6 stale B8B, stejna delka.
+Novy SARA_LOADER.tap je pripraven na realny test.
+
+Dalsi krok po navratu uzivatele: overit spusteni pri stare/nedokoncene FTP
+relaci (automaticke odpojeni+login+adresar), pak upload GAUNT3.TAP.
+Skutecny duvod ESP odpovedi pri drivejsi36 stale neni dokazany; netvrdit
+hardware potvrzeni teto obnovy ani uploadove opravy bez dalsiho testu.
+COM6 je NADaLE VYPNUT dle vyslovneho pozadavku, capture session9053 skoncil
+441 B; nespoustet bez dalsi domluvy/testu. Zaznamy jsou ulozene v temp.
+Bez commitu/pushe; posledni vzdaleny d8356dc. Indikator poradi pozastaven.
+
+## AKTUALNI 30. 10. 2026: COM6 VYPNUT na zadost uzivatele; start chyba36/4
+
+Uzivatel po nahrani nove TAP hlasi36 PRI STARTU, ne pri uploadu. Potom se
+opakuje4. Musel odejit; zadal proverit a odposlech COM6 VYPNOUT. Splneno:
+stopfile v sara-uart-20261030-192430, session9053 ukoncena (exit0),
+STOPPED bytes=441. COM6 je uvolnen, zadny aktivni capture.
+Ulozene rx.bin/chunks.jsonl zustavaji v temp slozce. NEznovuotevirat bez
+navazujiciho testu po navratu uzivatele. Program/TAPy v tomto kroku NEMENENY.
+
+Provereno USB a FTP log:
+20:25:40 STALE session50 z nedokonceneho GAUNT3 uploadu. SARA po startu
+odesila NOOP200, TYPE A200, PASV227. Potom uz zadny LIST ani CIPSTART1,
+novy upload se vubec nerozbehl. Prvni USB cast ma109 B. Po potvrzovani chyb
+UART pokazde CIPRECVMODE0, CIPSTATUS, CIPSEND0,6/NOOP, CIPSEND0,12/USER.
+Server20:26:27 NOOP200/USER331; nasledne NOOP530/USER331 opakovane.
+PASS se v novem pokusu NEODESLAL. Zadny novy STOR ani uploadovy blok.
+
+Zdroj:36 je v receive_ftp_answer/rfa3 pri C z at_wait_send v moderni
+(neuploadove) vetvi. C zde znamena explicitni AT_ERROR/SEND_FAIL/BUSY;
+obycejny timeout moderniho cteni by skoncil48. Ktery z techto AT vysledku
+nastal, NEVIME, dostupny USB proud odpovedi neobsahuje. Pri opakovane4
+je sfcerr3 (neshoda ocekavaneho FTP kodu) a error_handler_loop automaticky
+znovu get_status_ftp/NOOP, pak al_user_pass/USER. To vysvetluje opakovanou
+pokusnou prihlasovaci smycku, ale presny chybne precteny kod nemame.
+
+Nedokoncena predchozi FTP/datova relace je dolozena, zda prave ona zpusobila
+36, je zatim HYPOTEZA. Neslibovat potvrzenou pricinu ani opravu36.
+Dosavadni oprava55B usetreno v uploadovem cekani zatim na novem HW
+uploadu NEBYLA overena; start selhal driv. Nasledujici test po navratu:
+nejprve cisty stav ESP/FTP (po domluve restart Wi-Fi modulu / ukonceni stare
+relace), overit start a adresar; pak teprve upload a novy COM6 capture.
+Pokud36 zustane i pri cistem startu, nutno zachovat konkretni AT vysledek
+pred potvrzenim chyby (NMI/RX_buf nebo cilena diagnostika), misto hadani.
+Posledni build stale bios_start A681, banka6 B8B, volno5951 B, HGFX off.
+Bez commitu/pushe. Indikator poradi stale pozastaven; dalsi prace BSDOS.
+
+## Zivy odposlech pro test opraveneho uploadu
+
+COM6 znovu OTEVREN,3456000 Bd8N1 receive-only, exec session9053,
+limit1800s od2026-10-30T19:24:30Z. Novy vystup:
+C:/Users/milan/AppData/Local/Temp/sara-uart-20261030-192430/
+(rx.bin,chunks.jsonl,settings.json; stop vytvorenim souboru stop).
+Uzivatel ma nahrat aktualni SARA_LOADER.tap s opravou uploadovych cekani.
+Dalsi krok: precist posledni bajty tohoto NOVeho zaznamu a FTP log po
+vysledku uzivatelskeho testu. Predchozi capture190332 uz neni aktivni.
+
+## Aktualni checkpoint 30. 10. 2026: opravena uploadova cekani, ceka hardware
+
+Uzivatel nemuze prepojit odposlech a na navrh opravit cekani rekl 'ok,
+pokracuj'. Opravena potvrzeni uploadu, nikoli diskova cast ani deleni dat.
+SEND OK nyni cte existujici look_on_fly po bajtech s timeoutem; neztraci
+cast shody pri prestavce mezi ctenimi. Prompt uploadu stejne bounded,
+char_zob premapovan na samotne > (nevyzaduje OK ani koncovou mezeru).
+Po uspechu se dalsi UART bajty nemazou. Prazdny prijem/busy uz nemuze
+znovu a znovu restartovat nekonecne cekani. Original FTP/IPD parser zachovan.
+
+Test prokazal ztratu rozdeleneho SEND OK ve starem binarnim prekladu;
+novy prosel 515 kontrol BSDOS/152 ESXDOS, vcetne simulovaneho uploadu
+32768 a307201 B pres16KB banky a CIPCLOSE/226/navrat do adresare.
+Prosly vsechny souvisejici regrese; podrobnosti tests/upload-wait-audit.md.
+Neni tim potvrzen puvodni HW duvod abortu, odpovedi ESP odposlech neukazuje.
+
+Sestaveny aktualni oba normalni loadery, bez chyb/varovani, HGFX vypnuto.
+Oprava USPORILA55 B pod #C000: bios_start A6B8->A681, konec BIOS A8A1,
+volno pred BFE0=5951 B. Banka6 stale B8B. Zmeny bez commitu/pushe.
+Dalsi krok: uzivatel nahraje NOVY SARA_LOADER.tap a opakuje GAUNT3.TAP,
+vcetne druheho uploadu a nasledneho pruchodu adresari. Dostupny USB
+odposlech COM6 3456000 Bd zachovat stejnym zpusobem. Novy capture oddelit
+od ulozeneho sara-uart-20261030-190332 (291612 B, zastaveno).
+Indikator poradi polozky zustava pozastaven. Priorita BSDOS ->ESXDOS ->HGFX.
+
+## Aktualni checkpoint 30. 10. 2026: NMI presne potvrzuje cekani na ABOR prompt
+
+Uzivatel opsal HEX PC79C5, SP5FE6, zasobnik A17E,0080,8F12,8ABF,7E80.
+Adresy PRESNE odpovidaji aktualnimu BSDOS prekladu s opravou screenu:
+79C5 = OR D v receive_data1 (casovac receive_data_timeout).
+A17E = navrat po receive_data_timeout v upl_old_check_module_answer.
+0080 = pozadovany pocet bajtu; 8F12 = RX_buf; 8ABF = char_zob
+("OK" CRLF "> ");7E80 = navrat z check_module_answer v cipsend_request.
+Spolu s poslednim UART AT+CIPSEND=0,6 bez ABOR je tim potvrzeno, ze Sara
+zamrzla pri cekani na prompt pro ABOR. upl_old_check_module_answer pri
+opakovanem prazdnem prijmu zacina znovu bez celkoveho limitu.
+
+Puvodni pricina vstupu do ful_abort stale neni dokazana. Vsech139 datovych
+bloku po2048 B proslo na server bitove shodne (SHA256 overeno). Mozna
+ztrata/rozdelene SEND OK, ale odposlech neobsahuje smer ESP -> Sara.
+Nutny dalsi zaznam TX ESP / RX Sary pro odliseni chybejici/nespravne nebo
+predcasne spotrebovane odpovedi. Zatim zadny dalsi zasah do ASM/TAPu.
+
+Dosavadni capture zastaven vytvorenim 'stop' v temp slozce
+C:/Users/milan/AppData/Local/Temp/sara-uart-20261030-190332/; zkontrolovat
+ukonceni exec session4920 pred dalsim otevrenim COM6. Uchovat rx.bin a
+chunks.jsonl, NEcommitovat raw komunikaci. Dalsi capture zalozit oddelene
+pri stejne3456000 Bd po prepojeni smeru ESP -> Sara.
+
+## Aktualni checkpoint 30. 10. 2026: UART zachytil upload session50
+
+Uzivatel: upload tentokrat dojel podle obrazovky, ale na konci zamrzl.
+UART COM6 capture v sara-uart-20261030-190332/rx.bin ma aktualne291612 B;
+metadata LastWriteTime/Length jsou pri otevrenem writeru ZAVADEJICI, cist
+skutecnou delku pres FileStream.Length. Zaznam obsahuje pouze SARA -> ESP,
+nikoli odpovedi ESP (zadne SEND OK/Recv/+IPD). 139 prikazu
+AT+CIPSEND=1,2048 a plnych139 payloadu =284672 B. Extrahovany payload
+SHA256 presne souhlasi se souborem D:/zx/GAUNT3.TAP (284672 B).
+
+Posledni UART prikaz je AT+CIPSEND=0,6 CRLF v offsetu291596 (UTC19:06:53).
+Za nim uz neni ABOR ani dalsi prikaz. To odpovida vstupu do ful_abort a
+cekani na prompt pro odeslani ABOR; normalni uploadovy CIPCLOSE=1 se po
+datech NEODESLAL. Server log session50 STOR19:06:15 UTC /20:06:15 mistni
+->150, stale bez226/ABOR. Nelze zatim dolozit puvodni duvod abortu
+(chyba SEND OK je moznost, ne potvrzeni).
+
+Uzivateli poslana async otazka: NMI PC,SP,prvnich8 slov zasobniku v
+zamrzlem stavu. Cekame na odpoved. Alternativne dalsi odposlech TX ESP
+(smer modul -> Sara), aby bylo videt skutecne potvrzeni/prompty.
+Program ani TAPy se v teto diagnosticke fazi nemenily. Capture session4920
+stale otevrena, automaticky limit1800s od19:03:32 UTC; stop pres soubor stop.
+
+## Zivy UART odposlech COM6 - 30. 10. 2026
+
+Uzivatel pripojil USB odposlech COM6, rychlost3456000 Bd. CoolTerm musel
+uvolnit port. Capture je nyni OPRAVDU spusteny: exec session4920,
+COM6 3456000 8N1, receive-only, bez odesilani, DTR/RTS false.
+Skript tests/capture_uart.ps1, limit1800 s. Data a casove znacky:
+C:/Users/milan/AppData/Local/Temp/sara-uart-20261030-190332/
+rx.bin, chunks.jsonl, settings.json. Stop pres vytvoreni souboru 'stop'
+v tomto adresari. Zaznam je mimo Git; necommitovat zachycene prihlaseni.
+Dalsi krok: uzivatel zopakuje upload GAUNT3.TAP, pri zamrznuti zkontrolovat
+konec rx.bin a FTP log. Smer odposlechu zatim nebyl uzivatelem upresnen.
+Program Sary se pri priprave odposlechu nemenil.
+
+## Aktualni checkpoint 30. 10. 2026: upload GAUNT3.TAP zamrzl
+
+Uzivatel POTVRDIL funkcni opravu navratu ze screenu na stroji ('uz to jede').
+Pak testoval upload asi300 kB a pruchod adresari. Upload zamrzl, bez cisla
+chyby; podle obrazovky cca po jedne16KB strance. Precten konec lokalniho
+FileZilla logu: session49,19:57:54 SIZE GAUNT3.TAP ->550 (normalni test
+neexistujiciho cile), TYPE I200, PASV227;19:57:55 STOR ->150.
+Nasledne zadne226 ani ABOR. Cilovy soubor D:/zx/GAUNT3.TAP ma30720 B,
+LastWriteTime19:58:01 (15 bloku2048 B); NEBYL menen ani mazan agentem.
+Serverovy log neukazuje pricinu zamrznuti na strane Sary/ESP.
+
+Stary upload pouziva upl_old_check_module_answer, kde opakovany prazdny
+prijem nebo busy muze cekat bez celkoveho timeoutu. Bez UART/NMI zaznamu
+nelze urcit, zda aktualni zamrznuti je zde, pri SEND OK, nebo v ABOR.
+Podobny drivejsi problem a referencni zdroj jsou zdokumentovany nize.
+V tomto kroku nebyl menen program ani TAPy. Dalsi diagnostika: slibeny USB
+odposlech AT/UART komunikace, pripadne NMI PC/SP pri zamrznuti; pak urcit
+posledni uspesny prikaz/blok. Indikator poradi nadale pozastaven.
+Posledni sestaveni stale obsahuje opravu screenu +15B; bez commitu/pushe.
+
+## Aktualni checkpoint 30. 10. 2026: oprava navratu ze screenu
+
+Uzivatel hlasi po screenu error49 ->21 ->4 a zadal zkontrolovat log.
+Precten C:/Program Files (x86)/FileZilla Server/Logs/FileZilla Server.log:
+obsah ma dnesni zaznamy, ac soubor ukazuje stary LastWriteTime. Session47,
+19:47:23: 2BRSHLP1.SCR SIZE6144, RETR150/226 Transfer OK; potom PWD/NOOP
+server stale spravne odpovida. UART dukaz chyby49 zatim nemame.
+
+Ve zdroji screen konec nedocetl226 pred pasivni->aktivni zmenou prijmu.
+Oprava: vypnout tisk, docist a overit226, uzavrit datovy kanal1, vypnout
+pasivni prijem, teprve pak cekat na klavesu nad obrazkem. UI navrat stejny.
+Naklad +15 B pod #C000, banka6 beze zmeny. BSDOS bios_start #A6B8,
+konec BIOS #A8D8, volno do #BFE0 5896 B. Oba loadery prelozeny bez
+chyb/varovani, HGFX vypnuto. Test screenu 222 kontrol pro kazdou DOS
+variantu, souvisejici regrese prosly. Audit tests/screen-download-audit.md.
+Dalsi krok: uzivatel nahraje NOVY SARA_LOADER.tap a zopakuje SCR6144/6912,
+navrat klavesou a dalsi FTP operaci; overit zmizeni49/21/4 na stroji.
+
+INDIKATOR PORADI JE POZASTAVEN: uzivatel chtel najit stare prubezne
+pocitani. Git6.rijna jej neobsahuje, item_counter pridan21.rijna pro
+save_dir_position/restore_dir_view, ne pro kazdy pohyb. Rozpracovany
+novy indikator odstranen ze zdroju i sestavenych TAPu (nebyl otestovan).
+Pripadny dalsi navrh nejprve podle uzivatelova smerovani. Priorita BSDOS,
+pak ESXDOS, nakonec HGFX. Bez noveho commitu/pushe; posledni d8356dc.
+
+## Aktualni checkpoint 30. 10. 2026: opraven navrat do rodice (kurzor na konci)
+
+Uzivatel pri testu BSDOS hlasi spatny navrat stranky/kurzoru, vzdy posledni
+polozka. Nalezena konkretni pricina: natvrdo IX+41 pro priponu kolidovalo
+s hornim bajtem dir_list_pointer (IX+40..41). item_extension je IX+42.
+ENTER tak posilal historii z RAM #5F80 do ROM #0A80 u bezneho adresare;
+vadne obnovene poradi se pri navratu omezilo na konec seznamu.
+
+Opraveny vsechny 3 pristupy k pripone na IX+item_extension-flag1; komentar
+opraven a pridana kontrola rozsahu displacementu. Naklad PRESNE 0 bajtu.
+BSDOS bios_start #A6A9, banka6 #B8B, volno pred #BFE0 stale 5911 B.
+Oba loadery prelozeny bez chyb/varovani, HGFX vypnuto.
+
+Novy tests/directory_roundtrip.test.js selhal na puvodnim prekladu pri
+kontrole neporuseneho ukazatele historie, po oprave 140 kontrol pro kazdou
+DOS variantu proslo. Realne ENTER/get_item_name/get_extension/save/pop,
+item_add/sub/restore; simulovane FTP, obsah noveho adresare a vykresleni.
+Pokryty BREAK i ENTER na '..', chybne CWD a prechod pametove banky.
+Prosly i souvisejici regrese, podrobnosti tests/directory-roundtrip-audit.md.
+
+Dalsi krok: uzivatel nahraje NOVY SARA_LOADER.tap a zopakuje pruchod
+adresari v BSDOS. Priorita domluvena BSDOS -> ESXDOS -> nakonec HGFX.
+Zmeny nadale bez noveho commitu/pushe, posledni vzdaleny d8356dc.
+
+## Aktualni checkpoint 30. 10. 2026: posledni dotaz pro I/FIND
+
+Hotovo na zadani uzivatele: klavesa I predvyplni posledni potvrzeny dotaz.
+Prvni hledani je prazdne. Cache 64 B je v programove bance 6, mimo CFG/help
+workspace; BREAK nebo prazdny ENTER ji nemeni. Uklada se puvodni velikost
+pismen, samotny FIND nadale normalizuje jen INPBUFF. Kratsi novy dotaz ma
+terminator na skutecnem konci. Pouziva se existujici input_line_edit.
+
+find_input pod #C000 pristrankuje banku 6 po dobu editoru a ulozeni cache,
+pote obnovi puvodni banku a Z/NZ. Nova bankova cast find_input_bank.asm.
+Naklad teto zmeny: +19 B pod #C000, +81 B v bance 6 (17 kod, 64 cache).
+BSDOS bios_start #A6A9, konec BIOS #A8C9, do #BFE0 volnych 5911 B.
+Banka 6 #B8B B, cfg_file_here #CB8B. ESXDOS narust stejne +19/+81.
+
+Oba normalni preklady bez chyb/varovani, HGFX vypnuto, aktualni oba loader
+TAPy. Nove testy find_input: 1386 kontrol pro kazdou DOS variantu; prosly
+navazujici regrese editoru, adresare, downloadu, FTP ochran, Wi-Fi, TXT,
+a BSDOS CFG/profilu/helpu/uploadu/snapshotu. Audit tests/find-input-audit.md.
+Dalsi krok: uzivatelsky test I -> dotaz -> I, editace a BREAK na stroji.
+Zmeny nadale bez noveho commitu/pushe; posledni vzdaleny d8356dc.
+
+## Aktualni checkpoint 30. 10. 2026: oprava ochran FTP klaves hotova
+
+Uzivatel schvalil opravu s minimalnim narustem; predchozi help ponechat.
+Hotovo: sdilene ftp_ready / ftp_item_ready / ftp_control_ready a ochrany
+verejnych vstupu U/O/S/D/SS+D/CS+D/R/7/C/ENTER/BREAK/DELETE/6/Z.
+Kontroluje se spojeni a CLOSED ridiciho socketu, u polozek platny adresar.
+C dovoluje rucni FTP prikazy pri otevrenem TCP spojeni. Pametove operace
+nad cachovanym adresarem zustavaji dostupne offline. Klavesa 7 je pred
+branou platneho adresare. undraw_cursor bez adresare nesaha na ukazatel.
+Podrobnosti a testy: tests/action-guards-audit.md, action_guards.test.js.
+
+Oba normalni preklady bez chyb/varovani, HGFX vypnuto. Regresni testy
+sestaveneho Z80 prosly, nove ochrany 1697 kontrol pro kazdou DOS variantu.
+Naklad opravy +58 B pod #C000; odstraneni CS+L popisku -3 B, celkem
++55 B proti poslednimu commitu. BSDOS konec BIOS #A8B6, do #BFE0 volnych
+5930 B (navic 32 B rezervovano do #C000). Banka 6 stale #B3A B.
+Sestaveny SARA_LOADER.tap a SARA_ESX_LOADER.tap jsou aktualni.
+
+Dalsi krok: uzivatel otestuje odpojene/pripojene ovladani na stroji,
+zejmena R, downloady, ENTER a mazani. Nelze zatim tvrdit, ze vsechna
+pozorovana zamrznuti zmizela. Zmeny jsou BEZ noveho commitu/pushe;
+posledni vzdaleny commit d8356dc. Nize je historicky checkpoint auditu.
+
 # Predtestovy checkpoint Wi-Fi — 22. 10. 2026
+
+## Aktualni rozpracovano — 30. 10. 2026: audit klaves a podoba helpu
+
+Uzivatel chce zkontrolovat klavesy a doplnit sara.hlp, radky nejvyse64.
+Prohledany key_loop, INKEY tabulky, INPUT, roll, marking, FIND a dialogy.
+CS+L nema login akci: INKEY vraci 76 (velke L), main reaguje pouze na
+108 (l manualni login) a61 (=, SS+L automaticky). Overeno vykonanim skutecne
+INKЕY s modelovanou matici i pro CS+M77, SS+M46, CS+D68.
+Opraven zavadejici menu2 popisek Cs/ss+/L-login na ss+/L-login (jen text).
+Rozsireny pracovni sara.hlp: samostatne oznacovani/odoznacovani (SPACE
+posouva dolu, CS+M vse, SS+M odznacit), FIND nahradi oznaceni shodami,
+hromadne D/DELETE, X/Z pro dlouha jmena, INPUT klavesy, CFG a dialogy.
+Help ma121 radku, nejdelsi61 znaku, pouze ASCII. ASM funkce se nemenily;
+preklad po zmene menu zatim neproveden, dnesni upravy bez commitu/pushe.
+
+POSLEDNI STEERING: uzivatel chce nejprve ukazat podobu sve napovedy na
+strance, libi se mu oddeleni ovladani s/bez pripojeni. Cekame na ukazku,
+pak podle ni upravit strukturu helpu. Pri deleni respektovat take dostupnost
+nacteneho adresare: nektere operace nad nim jsou pouze pametove.
+Posledni zaloha dne29 je d8356dc na origin/fix-ftp-directory.
 
 ## POTVRZENO UZIVATELEM A PRIPRAVENO KE COMMITU — 29. 10. 2026
 

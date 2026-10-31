@@ -347,6 +347,15 @@ at_wait_event
         jr z,.error
         cp AT_BUSY
         jr z,.error                 ;not accepted: return control to caller
+        ld a,(ftp_upload_wait)
+        or a
+        jr z,.continue
+        ld a,(at_closed)
+        and 3
+        jr z,.continue
+        ld a,AT_SEND_FAIL           ; closure/Wi-Fi loss is not a temporary empty RX
+        jr .error
+.continue
         pop bc
         djnz .next
         ld c,48
@@ -585,6 +594,7 @@ at_reset_stream
 at_status_response
         xor a
         ld (at_status_haslink),a
+        ld (at_status_data),a
         ld hl,TX_buf
         ld (hl),0
         ld (at_status_next),hl
@@ -601,6 +611,13 @@ at_status_response
         jr z,.error
         cp AT_BUSY
         jr z,.error
+        ld hl,at_status_link1
+        call ftp_line_prefix
+        jr nz,.control
+        ld a,1
+        ld (at_status_data),a
+        jr .again
+.control
         ld hl,STATUS
         call ftp_line_prefix
         jr z,.append
@@ -660,6 +677,8 @@ at_status_response
 .missing scf
         ret
 at_status_link db "+CIPSTATUS:0,",0
+at_status_link1 db "+CIPSTATUS:1,",0
+at_status_data db 0
 at_status_next dw 0
 at_status_haslink db 0
 ftp_multiline dw 0
