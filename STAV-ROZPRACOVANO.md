@@ -1,3 +1,153 @@
+## Commit/push tohoto kroku: zarovnane pripony a BS-DOS TAP volby
+
+Uzivatel vyslovne zadal commit a push vsech zmen od 03a1194.
+Nazev commitu: Align directory extensions and add BS-DOS TAP options
+Vetev a push cil: fix-ftp-directory -> origin/fix-ftp-directory.
+Vysledny hash a stav push overit z git log / git status / origin reference.
+Soucasti commitu jsou zdroje, nove bankove rutiny/testy, help a preklady.
+
+UZIVATEL MUSI HW OTESTOVAT: zobrazeni pripon, rolovani dlouhych nazvu
+a praci s TAP (vsechny4 Delete/Run kombinace, hlavne Run=N a dalsi navigace).
+Toto NENI dosud HW overeno. Automaticke testy/predchozi upload testy viz nize.
+FTP ma posledni TAP Delete=Y, Run=Y, SHA C436E167...83CA37 (plny nize).
+SNA/Z80 a zakladni upload byly overeny drive; tato zmena je nemenila.
+Spousteni TAP/snapu pod ESXDOSem si chce uzivatel napsat sam.
+
+## Posledni domluva: Delete=Y, Run=Y; ESXDOS spousteni pise uzivatel
+
+Na zadost uzivatele BS-DOS vychozi flag2=#20: Delete=Y, Run=Y.
+ESXDOS flag2 zustava 0. Overeno v sestavenych binarkach: zmenen jen 1 B
+v hlavnim kodu a 1 B v bance6, velikost stejna. ESXDOS binarka beze zmen.
+Oba preklady bez chyb/varovani, TAP options regresni test 277 PASS.
+Nova SARA_LOADER.tap 28307 B uz i na lokalnim FTP se shodnym SHA256:
+C436E16753E51218446F70DCE55DB2865549865DCA64FBEE228AF1D13883CA37.
+Predchozi TAP: TEMP/SARA_LOADER-before-delete-default-yes-20261101-211420.tap.
+Posledni domluva: dalsi funkcni krok bude spousteni TAP a snapshotu pod
+ESXDOSem, uzivatel si jej chce napsat sam. Neimplementovat bez dalsiho zadani.
+BS-DOS HW test noveho vypisu a TAP voleb stale ceka. Zadny novy commit/push.
+
+## 1. 11. 2026: BS-DOS TAP prepinace hotove, pripraveno k HW testu
+
+SS+T Delete (flag2/IX+3 bit5), CS+T Run (bit6=STAY, tedy obraceny Run).
+Samotne T dal nastavuje startovni adresu. Default Delete=Y, Run=Y, flag2=#20.
+Volby nezavisle, TAP se vzdy stahne/rozbali, smazani jen puvodni TAP.
+JEN BS-DOS; ESXDOS binarka zustala presne stejna jako po zmene pripon.
+Menu na druhem radku odspodu pri idle; pri akci uvolni oba input radky.
+Ovladani/texty v bance6, pod C000 wrapper klavesnice a navrat z TAPmastera.
+Run=N obnovi ROM/IX/SP/3.5MHz, zneplatni bankou0 prepsany adresar,
+prekresli UI a znovu nacte adresar s ulozenym ordinalem/radkem kurzoru.
+Fatalni TAPmaster chyby zatim maji puvodni chovani. HW navrat jeste neoveren.
+
+Narust PROTI VERZI S NOVYMI PRIPONAMI: +50 B pod C000, +145 B banka6.
+Celkem +195 B. Volno do BFE0 6106 B; banka6 3532 B / 0DCC.
+Oba preklady 0 chyb/varovani. 50 regresi 747391 PASS + TAP handoff 1071 PASS.
+Detaily tests/tap-options-audit.md. sara.hlp doplnena, max64 znaku/radek.
+
+Nove SARA_LOADER.tap 28307 B uz na D:/zx/SARA_LOADER.tap, SHA256 overen:
+E0255710D25724BBAF854CFB38D8D2EE4464AE3E6E9B394861E14AB447EC2E12.
+Predchozi FTP TAP v TEMP/SARA_LOADER-before-tap-options-20261101-211016.tap.
+Aktualizovana sara.hlp take na FTP. Zadny novy commit/push, posledni03a1194.
+Dalsi krok: 2. 11. HW test zarovnanych pripon a vsech4 TAP voleb, hlavne
+Run=N -> navrat do adresare a dalsi navigace/download. Predchozi zmeny zachovany.
+
+## 1. 11. 2026: zarovnane pripony implementovany, pripraveno k HW testu
+
+Novy directory_display_bank.asm: vypis/rolovani a stav v bance 6 pro oba DOSy.
+Pripony 1-3 znaky vlevo zarovnane ve stejnem pravem trojznakovem sloupci,
+pred nim mezera. X/Z posouvaji jen telo radku, pri dalsim textu vpravo ..,
+na konci plny vyrez bez tecek. Delsi pripona: puvodni cele jmeno vcetne pripony.
+Adresare v kratkem LIST, synteticke .., dotfiles a plny LIST se nerozdeluji.
+NLST nezna typ; pripona se urcuje syntakticky. LIST metadata zachovana.
+Originalni adresar a jmena zustavaji nezmeneny, cteni pres hranice bank.
+
+PROTI 03a1194: pod C000 USPORA 245 B, banka 6 +429 B, soucet +184 B.
+BSDOS bios A5B4..A7D4, volno do BFE0 6156 B (drive 5911 B).
+Banka 6 3387 B / 0D3B, volno 12997 B. ESXDOS stejna zmena -245/+429.
+SARA_LOADER.tap 28162 B. Oba preklady bez chyb/varovani, HGFX zustava OFF.
+48 regresnich behu (vcetne noveho vypisu): 747113 kontrol, vse PASS.
+Navic TAP handoff 1067 PASS. Vykonavan sestaveny Z80, fyzicka klavesnice,
+strankovani a tisk simulovany. Detaily tests/directory-display-audit.md.
+
+Dalsi krok: uzivatel otestuje novou projektovou SARA_LOADER.tap na eLeMeNtu:
+kratke/dlouhe pripony, X/Z, adresar s teckou, navrat a ENTER/download.
+Na zadost uzivatele nove SARA_LOADER.tap zkopirovano na D:/zx/SARA_LOADER.tap.
+Overena shoda SHA256 projektu a FTP:
+4F8131768933A8FCCBEE155503189789310B763B50E11377B226DDAF7FC4D966, 28162 B.
+Predchozi FTP verze zalohovana v TEMP:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-aligned-extensions-20261101-205421.tap.
+Uzivatel planuje HW test zitra, 2. 11. 2026. Commit/push neproveden,
+posledni push stale 03a1194. Puvodni rozpracovane checkpointy zachovany.
+
+## Dohodnute zobrazeni pripon
+
+Uzivatel potvrdil pevny, zarovnany sloupec pro pripony delky 1 az 3 znaky.
+Pri delsi pripone zachovat puvodni vypis a rolovat cely nazev vcetne pripony.
+Pri kratke pripone zustava pripona vpravo a roluje se jen jmeno, s indikaci ..
+pred sloupcem pripony. Bez pripony a rozpoznane adresare ponechat puvodne.
+Implementace zatim nezacala, ASM beze zmen od commitu 03a1194.
+Pri posledni kontrole HEAD i lokalni origin/fix-ftp-directory ukazuji na 03a1194;
+push byl drive overen, aktualni ls-remote selhal na nedostupnem proxy spojeni.
+Necommitnuty je pouze tento checkpoint. Zadny novy commit ani push proveden.
+
+## Priprava oddeleneho zobrazeni pripon v adresari
+
+Uzivatel chce priponu vzdy vpravo, pri dlouhem jmenu dve tecky pred priponou
+a Z/X rolovat pouze jmeno. Prozkoumany print_item (radek 4604), roll_item
+(4819), print_item_roll (4955), get_item_name a bank-safe DIR128 pomocne rutiny.
+Dosud zadna zmena ASM ani binarek. Uprava ma menit jen zobrazeni, nikoli
+ulozeny FTP nazev. Je nutne sjednotit bezny vypis a rolovani, vcetne hranic bank.
+Zkraceny LIST obsahuje take velikost a datum, nesmi se bez domluvy odstranit.
+get_item_name zna soubor/adresar v kratkem LIST, NLST vraci neznamy typ,
+plny LIST zatim neni rozebiran (A=3). Adresare s teckou nerozdelovat, pokud
+jejich typ zname. Pripona neni omezena tabulkou get_extension (CFG apod.).
+Polozena async otazka: pevne 3 znaky nebo promenliva sirka pro delsi pripony.
+Odpoved zatim neprisla. Ilustrace https://hood.speccy.cz/dwnld/osl_07_4.png
+nedostupna pres web open i Invoke-WebRequest; netvrdit, ze byla prohlednuta.
+Dalsi krok: dohodnout sirku/sloupec a implementovat spolecne formatovani,
+overit dlouha jmena, vice tecek, bez pripony, adresare a prechody bank,
+spocitat skutecny narust pod C000. Upload ponechat beze zmen.
+
+## Kontrola moznosti zkraceni uploadu
+
+Uzivatel preferuje stabilitu pred usporou; navrhl odstranit stare nepouzivane rutiny.
+Kontrola uploadove cesty: send_data, send_abort a cipsend_lod jsou stale volane.
+receive_data_timeout a look_for_string pouzivaji jine casti programu.
+tests/transfer-pause-audit.md potvrzuje drivejsi odstraneni ftp_upload_legacy.asm
+a stareho parseru. Aktualni upload uz nema druhou starou implementaci k vymazani.
+upload_last_event je diagnostika pouzivana take regresnimi testy, zachovana.
+Zakomentovana diagnostika nezabira bajty ve vysledne binarce.
+V tomto kroku zadna zmena zdroju/binarniho kodu, uspora 0 B; nejde o globalni
+audit dosazitelnosti vsech rutin cele aplikace. Nemeritelnou usporu neslibovat.
+
+## DOKONCENO1.11.2026 commitpush, aktualni mereniuploadu
+
+Commit03a1194bd8c9aab5973f866743c88ed2cfbd0965
+"Keep basically tested upload settings and restore normal UART baud"
+bylUSPESNEpushnutnaorigin/fix-ftp-directory, overenols-remoteSHAshodnyHEAD.
+Prvnipushauto-reviewodmitl kvulineoverenivlastnictvi/cile. Ověřen GitHubconnector:
+authenticatedmilan-stava ID200896926, stejnyownerrepo1407818292, public,
+admin/pushtrue, presnyclone_urlorigin. Potompuvodnipushpovolenaproveden.
+Nevyskytlseforcepush. Poslednimcommitemzahrnutpredchozilokalni2589400.
+Tedpo commitupribyvapouzetotomeřicí/checkpointdoplnění.
+
+Uzivatelchcespocitatuploadbajty a pakporovnatstarouSaru. Prostarounejlepsi
+LSTsadresami+strojovymibajty (spravnyDOSbuild), ASMstacisINCLUDEaprekladem.
+AktualniBSDOSsestavenisymboly:
+ftp_upload_file634B->ftp_quit_connection64FA =431B
+cipsend_lod80A7->display_progress80E6 =63B
+send_data79F9->count_com_len7A11 =24B
+send_abort7DDD->send_ftp_command7DE1 =4B
+ftp_upload_baud_beginA66F->savedA6A8vcetne1B =58B
+ftp_upload_cancel->ftp_line_prefix =9B, ftp_upload_wait1B.
+Samostatnerutiny+dataCELKEM590B (v tom7Bstavovychdat).
+Dalsiupload-specificvložkyvesdilenemkodu:
+14Bftp_read_byte uploadwaitcheck,
+17Bat_wait_eventuploadclosurecheck(A30A->A31B),
+11Bbaudrestorehooksmimohlavniblok(2CALL+vymazsavedmarker).
+SevsemiuploaddodatkyCELKEM632B, ztoho625Binstrukce+7Bstav.
+NEZAHRNUJEtisky/texty/FTPverbstrings, obecnyATparser, BIOS, DOSčtenísouboru,
+obecneklavesnicove/FTPsluzby pouzivaneidalsimicestami.
+Pri srovnanistareverze dodrzetstejnyrozsah, nescitatcelekvsechzavislosti.
 ## ZAVER1.11.2026: zakladniuploadotestovan,commit+pushzadany
 
 Uzivatel vyslovne: uploadtednechat,jakje, commitspoznamkouapushnaGit.
@@ -1535,3 +1685,19 @@ Nekdy se adresar nenacte cely. Neni povazovano za vyresene.
 Po stabilizaci uploadu je domluvena kontrola komunikace s Wi-Fi: AT odpovedi,
 fragmentace, timeouty, +IPD, CLOSED a dokoncovani prenosu (vcetne 226 a zbytku
 dat v modulu). Nyni tuto rozsahlejsi praci nezacinat.
+## 1. 11. 2026: porovnani velikosti uploadu se starou Sarou
+
+Overeno ze stareho sarah_ftp_client_bsd1.lst, dodaneho uzivatelem:
+D:/zx_original/1zx/projekty/wifi a veci okolo/Sarah-ftp client.ftp/
+12AI HGFX release_ jako_12 RELEASE, pridavam HGFX 64x24 znaku_verze oprimalozivana od AI co do delky/source/
+
+Stejny rozsah jako predchozi mereni aktualni verze, bez obecnych sluzeb a textu:
+- ftp_upload_file CC12 -> ftp_quit_connection CD75: 355 B (vcetne 4 B dat).
+- send_data DBA3 -> count_com_len DBBB: 24 B.
+- send_abort DF32 -> send_ftp_command DF36: 4 B.
+- cipsend_lod E1AF -> display_progress E1EE: 63 B.
+Stary upload celkem 446 B (442 B instrukce + 4 B data).
+Aktualni samostatne rutiny/data 590 B: narust 144 B.
+Aktualni vcetne uploadovych vlozek ve sdilenem kodu 632 B: narust 186 B.
+Jde o vymezeny uploadovy kod, nikoli velikost vsech jeho sdilenych zavislosti.
+Zdroj ani binarky nezmeneny; zadny novy commit/push. Dalsi prace dle uzivatele.

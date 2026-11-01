@@ -651,6 +651,13 @@ cfg_title:          db "Your profiles:",0
 
 ;2) prace s TAPkou
 work_tap	di
+        bit     6,(ix+3)
+        jr      z,.relocate
+        ld      hl,(item_counter)
+        ld      (dir_restore_item),hl
+        ld      a,(wind_curs_item)
+        ld      (dir_restore_row),a
+.relocate:
 		ld	hl,tapmaster_start
 		ld	de,#4000
 		push	de
@@ -666,6 +673,58 @@ tapmaster_len	equ	$-tapmaster
         ASSERT tapmaster_len > 0
         ASSERT #4000+tapmaster_len <= SPCKO-64
 ;to je cele pro TAPku
+
+; Idle menu on row 22. That row belongs to prompts/progress during actions;
+; clear it before dispatching a key and restore settings on the next idle scan.
+tap_options_keyboard_bank:
+        call    tap_options_show
+        call    KEYSCAN
+        or      a
+        ret     z
+        push    af
+        call    clear_edit_zone
+        xor     a
+        ld      (tap_options_visible),a
+        pop     af
+        cp      ">"             ; SS+T in the existing INKEY table
+        jr      z,.delete
+        cp      "T"             ; CS+T; plain T remains the start-address input
+        ret     nz
+        ld      a,#40
+        jr      .toggle
+.delete ld      a,#20
+.toggle xor     (ix+3)
+        ld      (ix+3),a
+        xor     a               ; consume the toggle; no other main-loop action
+        ret
+
+tap_options_show:
+        ld      a,(tap_options_visible)
+        or      a
+        ret     nz
+        call    clear_edit_zone ; remove any prompt/progress left by the action
+        ld      a,"N"
+        bit     5,(ix+3)
+        jr      z,.delete
+        ld      a,"Y"
+.delete ld      (tap_options_delete),a
+        ld      a,"Y"
+        bit     6,(ix+3)
+        jr      z,.run
+        ld      a,"N"
+.run    ld      (tap_options_run),a
+        ld      hl,txt_adr_edit_zone1
+        ld      de,tap_options_text
+        call    PRINTHL
+        ld      a,1
+        ld      (tap_options_visible),a
+        ret
+tap_options_visible db 0
+tap_options_text db "TAP: SS+T Delete="
+tap_options_delete db "Y"
+        db "  CS+T Run="
+tap_options_run db "Y",0
+        ASSERT $-tap_options_text-1 <= line_length
 
 ;3) spusteni snapu SNA a Z80
 work_snap       ld	a,#63			;now jump into bsdos nmi menu and run snap

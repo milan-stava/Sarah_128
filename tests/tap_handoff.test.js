@@ -38,6 +38,9 @@ for (const flags of [0, 0x20, 0x40, 0x60, 0xdf, 0xff]) {
   if (pc === S.START) {
    assert(Buffer.from(r.m.slice(0x4000, 0x4000 + source.length)).equals(source), 'actual work_tap copy');
    assert((r.m[S.fnum] | r.m[S.fnum + 1] << 8) === 321, 'input file number preserved');
+   if(flags&0x40){
+    assert((r.m[S.dir_restore_item]|r.m[S.dir_restore_item+1]<<8)===73&&r.m[S.dir_restore_row]===5,'stay mode saves ordinal and row before extraction overwrites directory');
+   }
    copied = true;
   }
   if (pc === S.PAGE128) {
@@ -52,6 +55,7 @@ for (const flags of [0, 0x20, 0x40, 0x60, 0xdf, 0xff]) {
  }});
  cpu.m.set(bank6, 0xc000); cpu.m[S.flag2] = flags;
  cpu.m[S.fnum] = 321 & 255; cpu.m[S.fnum + 1] = 321 >> 8;
+ cpu.m[S.item_counter]=73;cpu.m[S.item_counter+1]=0;cpu.m[S.wind_curs_item]=5;
  try { cpu.call(S.work_tap); throw Error('handoff did not reach START'); } catch (e) { if (e !== stop) throw e; }
 }
 {

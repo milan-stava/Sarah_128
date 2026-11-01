@@ -698,7 +698,10 @@ del_tap		ld	a,0		;patched at START: 0=keep TAP, #20=delete
 		ld	a,#28
 		rst	#20
 
-dt1		ld	bc,(first_free)
+dt1     ld      a,(flag2)
+        and     #40             ; bit 6=stay in Sarah; independent of deletion
+        jp      nz,tap_return
+        ld      bc,(first_free)
 		push	bc
 		ld	ix,seq_buff
 ;		ld	ix,HEAD32

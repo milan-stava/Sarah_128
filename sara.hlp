@@ -12,6 +12,8 @@ L and SS+L start the connection rather than require one.
 
 F           Set the default file name for SS+D
 T           Set file start address (BS-DOS, not ESXDOS)
+SS+T        Toggle deletion of the original TAP (BS-DOS)
+CS+T        Toggle Run after TAP extraction (BS-DOS)
 A           Toggle automatic login when Sarah starts
 H           Set FTP host
 E           Set user name
@@ -27,6 +29,15 @@ K           Read local sara.hlp (BS-DOS)
 L           Start manual login; enter user and password
 SS+L (=)    Start automatic login using configured values
 CS+L        Not assigned in the main screen
+
+TAP OPTIONS (BS-DOS)
+-------------------
+TAP files are always downloaded and extracted.
+Delete=Y deletes the original TAP after extraction.
+Run=Y starts the extracted program; Run=N returns to Sarah.
+The extracted files are kept in both cases.
+Options appear on the second row from the bottom when idle.
+V saves these settings with the application.
 
 CACHED DIRECTORY (NO FTP COMMANDS)
 ---------------------------------

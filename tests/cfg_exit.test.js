@@ -25,6 +25,10 @@ function cfgExitRegression(makeCpu,image,bios,S,bank6,sample) {
    if(pc===S.auto_login){logins++;assert(exit===13,'BREAK must not invoke SS+L');assert(str(r.m,S.host_url)==='host'+movement.length,'selected host installed before SS+L');assert(active===(hasDirectory?0:3),'restore bank/UI before SS+L');return {ret:true,a:0x55};}
    if(pc===S.cfg_read_file){loads++;u.m.set(bytes(config+'\0'),S.cfg_file_here);return {ret:true,carry:false};}
    if(pc===S.print_page)draws++;
+   // Stop at the outer main keyboard call, before its bank-6 TAP menu wrapper.
+   if(pc===S.tap_options_keyboard&&returned){
+    assert(idle&&r.ix===S.flag1&&r.stack.length===2,'main loop returns to keyboard with balanced stack and IX');throw stop;
+   }
    if(pc===S.KEYSCAN){
     if(!started){started=true;return {ret:true,a:103};}
     if(!returned){assert(keys.length>0,'browser has no unexpected keyboard wait');return {ret:true,a:keys.shift()};}

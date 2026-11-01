@@ -16,6 +16,7 @@ function makeCpu(code, bios, S, options={}) {
  const at=pc,op=m[pc++];
  switch(op){
  case 0x31:{const sp=word();stack.length=(0xf000-sp)/2;break;}
+ case 0xe7:stack.push(pc);pc=0x20;break; // RST #20 (BS-DOS service)
  case 0x00:break;
  case 0x2f:a^=255;break;
  case 0x07:cf=!!(a&128);a=((a<<1)|(a>>7))&255;break; // RLCA keeps Z
@@ -76,7 +77,7 @@ function makeCpu(code, bios, S, options={}) {
  case 0x0f:cf=!!(a&1);a=(a>>1)|(cf?128:0);break;
  case 0x1f:{const old=cf;cf=!!(a&1);a=(a>>1)|(old?128:0);break;}
  case 0xcb:{const op2=m[pc++];if(op2>=0x08&&op2<=0x0f){const v=get(op2&7);cf=!!(v&1);const result=(v>>1)|(cf?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x18&&op2<=0x1f){const v=get(op2&7),old=cf;cf=!!(v&1);const result=(v>>1)|(old?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x38&&op2<=0x3f){const v=get(op2&7);cf=!!(v&1);put(op2&7,v>>1);z=(v>>1)===0;}else if(op2===0x79)z=!(c&128);else if(op2===0x47)z=!(a&1);else if(op2>=0x40&&op2<=0x7f)z=!(get(op2&7)&(1<<((op2>>3)&7)));else if(op2>=0x80){const mask=1<<((op2>>3)&7);put(op2&7,op2>=0xc0?get(op2&7)|mask:get(op2&7)&~mask);}else throw Error("CB "+op2);break;}
- case 0xdd:{const op2=m[pc++];if(op2===0x21){ix=word();break;}if(op2===0xe5){stack.push(ix);break;}if(op2===0xe1){ix=stack.pop();break;}if(op2===0x61){ix=(ix&255)|(c<<8);break;}if(op2===0x44){b=ix>>8;break;}if(op2===0xbc){cp(ix>>8);break;}if(op2===0x19){const n=ix+de();cf=n>65535;ix=n&65535;break;}const disp=m[pc++];const addr=(ix+(disp<128?disp:disp-256))&65535;if([0x46,0x4e,0x56,0x5e,0x66,0x6e,0x7e].includes(op2)){put((op2>>3)&7,m[addr]);break;}if(op2===0x77){m[addr]=a;break;}if(op2===0x36){m[addr]=m[pc++];break;}if(op2===0x34||op2===0x35){m[addr]=(m[addr]+(op2===0x34?1:-1))&255;z=m[addr]===0;break;}if(op2===0xbe){cp(m[addr]);break;}if(op2!==0xcb)throw Error('DD '+op2);const bitop=m[pc++],mask=1<<((bitop>>3)&7);if(bitop<0x80){z=!(m[addr]&mask);}else if(bitop<0xc0){m[addr]&=255^mask;}else{m[addr]|=mask;}break;}
+ case 0xdd:{const op2=m[pc++];if(op2===0x21){ix=word();break;}if(op2===0xe5){stack.push(ix);break;}if(op2===0xe1){ix=stack.pop();break;}if(op2===0x61){ix=(ix&255)|(c<<8);break;}if(op2===0x44){b=ix>>8;break;}if(op2===0xbc){cp(ix>>8);break;}if(op2===0x19){const n=ix+de();cf=n>65535;ix=n&65535;break;}const disp=m[pc++];const addr=(ix+(disp<128?disp:disp-256))&65535;if([0x46,0x4e,0x56,0x5e,0x66,0x6e,0x7e].includes(op2)){put((op2>>3)&7,m[addr]);break;}if(op2===0xae){a^=m[addr];logic();break;}if(op2===0x77){m[addr]=a;break;}if(op2===0x36){m[addr]=m[pc++];break;}if(op2===0x34||op2===0x35){m[addr]=(m[addr]+(op2===0x34?1:-1))&255;z=m[addr]===0;break;}if(op2===0xbe){cp(m[addr]);break;}if(op2!==0xcb)throw Error('DD '+op2);const bitop=m[pc++],mask=1<<((bitop>>3)&7);if(bitop<0x80){z=!(m[addr]&mask);}else if(bitop<0xc0){m[addr]&=255^mask;}else{m[addr]|=mask;}break;}
  case 0xed:{
  const o=m[pc++];const port=bc();
  if(o===0x73){const addr=word(),sp=0xf000-2*stack.length;m[addr]=sp&255;m[addr+1]=sp>>8;}

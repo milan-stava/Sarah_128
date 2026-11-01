@@ -39,7 +39,7 @@ function actionGuardsRegression(makeCpu,image,bios,S) {
  for(const key of [117,111,115,100,68,92,114,55,99,13,1,12,54,122])for(const directory of [false,true]) {
   let scans=0,cpu;
   cpu=makeCpu([],bios,S,{image,hook(pc,r){
-   if(pc===S.KEYSCAN){if(scans++){assert(r.stack.length===2&&r.ix===S.flag1,'rejected key returns to main keyboard');throw stop;}return {ret:true,a:key};}
+   if(pc===S.KEYSCAN||pc===S.tap_options_keyboard){if(scans++){assert(r.stack.length===2&&r.ix===S.flag1,'rejected key returns to main keyboard');throw stop;}return {ret:true,a:key};}
    if(effects.some(n=>S[n]===pc)||pc===S.error_handler)throw Error('offline key produced an action '+key);
    if(pc===S.rece_byte||pc===0xe0d7)return {ret:true,z:true};
   }});cpu.m[S.flag1]=0;cpu.m[S.flag_dir]=directory?1:0;cpu.m[S.status_byte]=52;cpu.m[S.at_closed]=1;
@@ -50,7 +50,7 @@ function actionGuardsRegression(makeCpu,image,bios,S) {
  // New-directory dispatch is available before LIST; memory actions remain offline.
  for(const [key,target] of [[55,'create_dir'],[11,'key_up'],[10,'key_down'],[32,'mark_item'],[77,'mark_all'],[46,'unmark_all'],[105,'find_items'],[120,'roll_item']]) {
   let reached=false;const cpu=makeCpu([],bios,S,{image,hook(pc){
-   if(pc===S.KEYSCAN)return {ret:true,a:key};
+   if(pc===S.KEYSCAN||pc===S.tap_options_keyboard)return {ret:true,a:key};
    if(pc===S[target]){reached=true;throw stop;}
    if(pc===S.send_string)throw Error('unexpected FTP on cached operation');
   }});cpu.m[S.flag1]=key===55?32:0;cpu.m[S.flag_dir]=key===55?0:1;cpu.m[S.at_closed]=0;

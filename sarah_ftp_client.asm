@@ -639,7 +639,7 @@ s_ldir		ld	(wifi_type),a
 ;bit 3=window for AP list or speed list? (1=AP list, 0= speed list)
 ;bit 4=session ID,0=ID 0, 1=ID 1
 ;bit 5=delete original TAP after extraction, 0=keep, 1=delete
-;bit 6=stay in Sarah after extraction, 0=run, 1=stay (reserved, not implemented)
+;bit 6=stay in Sarah after extraction, 0=run, 1=stay (BS-DOS)
 						
 
 st1
@@ -750,7 +750,12 @@ ftp_socket_ready:
         cpl
         and 1
         ret
-key_loop	call	KEYSCAN
+key_loop
+	IFDEF bs_dos
+        call    tap_options_keyboard
+	ELSE
+        call    KEYSCAN
+	ENDIF
 	IFDEF bs_dos
         cp      "g"
         call    z,cfg_choose_profile
@@ -4086,6 +4091,35 @@ snap_not_found
             xor     a
             ret
 
+; TAPmaster uses its own stack and bank 0 as a disk buffer. Rebuild the
+; main stack/UI and reload the invalidated FTP directory before navigation.
+tap_return
+        ld      a,#40
+        out     (23),a
+        ld      sp,basic_end
+        ld      hl,error_handler_loop
+        push    hl
+        ld      ix,flag1
+        call    set_3_5mhz
+        res     0,(ix+1)
+        call    print_whole_screen
+        call    directory_retrieve
+        jp      initsp_keyloop
+
+; Keep key_loop+3 as the dispatch entry. The bank-6 keyboard wrapper shows
+; idle TAP settings and clears the shared input rows before an action.
+tap_options_keyboard
+        ld      a,(PAGE128_STATE)
+        push    af
+        ld      a,program_page
+        call    PAGE128
+        call    tap_options_keyboard_bank
+        ex      af,af'
+        pop     af
+        call    PAGE128
+        ex      af,af'
+        ret
+
         ENDIF
 
         INCLUDE "text_viewer_io.asm"
@@ -4601,71 +4635,11 @@ DIR128_CUR_ATTR_HL
 ; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
 ; Poznamka: Používá dir_print_buf; čtení zvládá hranice bank.
 ; --- KONEC DOKUMENTACE CZ ---
-print_item	ld	hl,(cur_item_addr)	;print one item, bank-safe
-		ld	de,(cur_item_addr_page)
-		call	DIR128_MAP_DE
-
-		;Read 16-bit item length. Header may cross a bank boundary.
-		ld	a,(hl)
-		ld	e,a
-		call	DIR128_INC_HL
-		ret	c
-		ld	a,(hl)
-		ld	d,a			;DE=stored item length
-
-		;Stored length includes the attribute byte at item+2. Display starts
-		;at item+3, so printable character count is length-1.
-		dec	de
-		call	DIR128_INC_HL		;HL=item+2, attribute byte
-		ret	c
-		call	DIR128_INC_HL		;HL=item+3, first printable byte
-		ret	c
-
-		;Select number of characters copied to fixed print buffer.
-		;C=1 means item is longer than one display line and needs "..".
-		ld	c,0
-		ld	a,d
-		or	a
-		jr	nz,print_item_long
-		ld	a,e
-		cp	line_length+1
-		jr	nc,print_item_long
-		ld	b,e
-		jr	print_item_copy_start
-print_item_long
-		ld	b,line_length
-		ld	c,1
-
-print_item_copy_start
-		ld	de,dir_print_buf
-		ld	a,b
-		or	a
-		jr	z,print_item_copy_done
-print_item_copy_loop
-		ld	a,(hl)
-		ld	(de),a
-		inc	de
-		djnz	print_item_copy_more
-		jr	print_item_copy_done
-print_item_copy_more
-		call	DIR128_INC_HL
-		jr	nc,print_item_copy_loop
-
-print_item_copy_done
-		xor	a
-		ld	(de),a			;normal zero-terminated string for PRINTHL
-		ld	a,c
-		or	a
-		jr	z,print_item_buffer_ready
-		ld	a,"."
-		ld	(dir_print_buf+line_length-2),a
-		ld	(dir_print_buf+line_length-1),a
-		xor	a
-		ld	(dir_print_buf+line_length),a
-print_item_buffer_ready
-		ld	hl,(cur_lin_prn_adr)
-		ld	de,dir_print_buf
-		call	PRINTHL
+print_item
+        ld      a,program_page
+        call    PAGE128
+        call    dir_display_item
+        ; Attribute drawing maps the current directory bank again.
 
 ; --- DOKUMENTACE CZ: print_item_attrs ---
 ; Ucel: Aktualizuje grafické označení položky.
@@ -4804,179 +4778,69 @@ pp2		pop	hl			;return cursor screen address
 
 
 
-;roll item longer than one screen line
-;The item itself may be 16-bit long. line_length is ONLY the visible width.
-;roll_addr + roll_page hold the first currently displayed character.
-;The pointer can therefore move through #FFFF/#C000 without any special case here.
+; Directory scrolling runs in bank 6; fixed-RAM bridges read directory banks.
+; The logical offset and 16-bit position are held by directory_display_bank.asm.
 ; --- DOKUMENTACE CZ: roll_item ---
 ; Ucel: Umožní vodorovně posouvat jméno delší než šířka řádku.
 ; Vstup: Aktuální položka adresáře; IX = flag1.
 ; Vystup: Krátké jméno: RET; jiná klávesa při posouvání: návrat do key_loop+3.
 ; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb. Při KEYSCAN
 ;   pracuje také s alternativní sadou BC'/DE'/HL'.
-; Poznamka: Inicializuje roll_*; klávesy X/Z posouvají jméno.
+; Poznamka: X/Z posouvaji jmeno; kratka pripona zustava ve sloupci vpravo.
 ; --- KONEC DOKUMENTACE CZ ---
 roll_item
-		call	DIR128_CUR_LENGTH_DE	;DE=stored item length (includes attribute byte)
-		ret	z
-		dec	de			;DE=number of printable bytes
+        ld      a,program_page
+        call    PAGE128
+        call    dir_display_roll
+        push    af
+        ld      hl,(cur_item_addr)
+        ld      de,(cur_item_addr_page)
+        call    DIR128_MAP_DE
+        pop     af
+        or      a
+        ret     z
+        push    af
+        call    print_page
+        pop     af
+        jp      key_loop+3
 
-		;Nothing to roll when printable part fits on one display line.
-		push	de
-		ld	hl,line_length
-		or	a
-		sbc	hl,de
-		pop	de
-		ret	nc
+; Fixed-RAM bridges for the bank-6 formatter. No return into bank 6 while
+; directory RAM is mapped. The original directory is never written.
+dir_display_info
+        call    get_item_name
+        push    af
+        call    dir_display_bank
+        pop     af
+        ret
 
-		;roll_max = printable_length - line_length
-		ex	de,hl			;HL=printable length
-		ld	de,line_length
-		or	a
-		sbc	hl,de
-		ld	(roll_max),hl
-		ld	hl,0
-		ld	(roll_pos),hl
-
-		;Get first printable byte = current item start + 3.
-		ld	hl,(cur_item_addr)
-		ld	de,(cur_item_addr_page)
-		call	DIR128_MAP_DE
-		call	DIR128_INC_HL
-		ret	c
-		call	DIR128_INC_HL
-		ret	c
-		call	DIR128_INC_HL
-		ret	c
-		ld	(roll_addr),hl
-		ld	de,(fdp_pointer)
-		ld	(roll_page),de
-
-		;Count screen line of current item, same logic as original code.
-		ld	a,(ix+21)
-		ld	hl,txt_adr_mezera	;=txt_adr_dir_display-1
-ri1		inc	h
-		dec	a
-		jr	nz,ri1
-		ld	(pir2+1),hl
-
-		;Initial X press moves one character to the right and displays it.
-		call	roll_item_inc
-
-roll_item_key	exx
-		call	KEYSCAN
-		exx
-		cp	"z"
-		call	z,roll_item_dec
-		cp	"x"
-		call	z,roll_item_inc
-		cp	0
-		jr	z,roll_item_key
-
-		;Any other key ends rolling. Repaint normal directory page and
-		;continue in the main keyboard loop with that key preserved.
-		push	af
-		call	print_page
-		pop	af
-		jp	key_loop+3
-
-
-;Move rolling window one character to the right.
-; --- DOKUMENTACE CZ: roll_item_inc ---
-; Ucel: Posune zobrazovaný výřez dlouhého jména o znak vpravo/vlevo.
-; Vstup: Inicializované roll_addr, roll_page, roll_pos a roll_max.
-; Vystup: Aktualizovaný výřez, nebo beze změny na hranici; A=0.
-; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
-; Poznamka: Mění roll_*, mapování RAM a překresluje řádek.
-; --- KONEC DOKUMENTACE CZ ---
-roll_item_inc
-		ld	hl,(roll_pos)
-		ld	de,(roll_max)
-		or	a
-		sbc	hl,de
-		jr	z,roll_item_no_move	;already at right limit
-
-		ld	hl,(roll_addr)
-		ld	de,(roll_page)
-		call	DIR128_MAP_DE
-		call	DIR128_INC_HL
-		jr	c,roll_item_no_move
-		ld	(roll_addr),hl
-		ld	de,(fdp_pointer)
-		ld	(roll_page),de
-		ld	hl,(roll_pos)
-		inc	hl
-		ld	(roll_pos),hl
-		jr	print_item_roll
-
-
-;Move rolling window one character to the left.
-; --- DOKUMENTACE CZ: roll_item_dec ---
-; Ucel: Posune zobrazovaný výřez dlouhého jména o znak vpravo/vlevo.
-; Vstup: Inicializované roll_addr, roll_page, roll_pos a roll_max.
-; Vystup: Aktualizovaný výřez, nebo beze změny na hranici; A=0.
-; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
-; Poznamka: Mění roll_*, mapování RAM a překresluje řádek.
-; --- KONEC DOKUMENTACE CZ ---
-roll_item_dec
-		ld	hl,(roll_pos)
-		ld	a,h
-		or	l
-		jr	z,roll_item_no_move	;already at left limit
-
-		ld	hl,(roll_addr)
-		ld	de,(roll_page)
-		call	DIR128_MAP_DE
-		call	DIR128_DEC_HL
-		jr	c,roll_item_no_move
-		ld	(roll_addr),hl
-		ld	de,(fdp_pointer)
-		ld	(roll_page),de
-		ld	hl,(roll_pos)
-		dec	hl
-		ld	(roll_pos),hl
-		jr	print_item_roll
-
-roll_item_no_move
-		xor	a			;avoid artificial key press
-		ret
-
-
-;Print exactly line_length characters from current rolling position.
-;Each byte is read through DIR128_INC_HL, so the visible window may itself
-;cross from one directory page to another.
-; --- DOKUMENTACE CZ: print_item_roll ---
-; Ucel: Vytiskne výřez dlouhého jména napříč bankami.
-; Vstup: roll_addr/roll_page; operand pir2+1 = pozice řádku.
-; Vystup: Vytištěno nejvýše line_length znaků; A=0.
-; Meni: AF, B, DE, HL; další registry dle CHAR.
-; Poznamka: Banku průběžně mění DIR128_INC_HL.
-; --- KONEC DOKUMENTACE CZ ---
-print_item_roll
-		ld	hl,(roll_addr)
-		ld	de,(roll_page)
-		call	DIR128_MAP_DE
-		ld	b,line_length
-pir2		ld	de,#5555		;screen address of this directory line
-
-pir1		ld	a,(hl)
-		push	hl
-		push	de
-		push	bc
-		ex	de,hl			;HL=screen address for CHAR
-		call	CHAR
-		pop	bc
-		pop	de
-		pop	hl
-		inc	de			;next screen character
-		djnz	pir1_next
-		xor	a
-		ret
-pir1_next
-		call	DIR128_INC_HL
-		jr	nc,pir1
-		xor	a
-		ret
+; HL=logical directory offset 0..65535, B=1..line_length bytes.
+; Copies to dir_print_buf across bank boundaries. Returns in bank 6.
+dir_display_read
+        push    hl
+        ld      a,h
+        rlca
+        rlca
+        and     3
+        ld      e,a
+        ld      d,0
+        ld      hl,ftp_dir_page+1
+        add     hl,de
+        ex      de,hl
+        pop     hl
+        set     6,h
+        set     7,h
+        call    DIR128_MAP_DE
+        ld      de,dir_print_buf
+.copy   ld      a,(hl)
+        ld      (de),a
+        inc     de
+        djnz    .more
+        jr      dir_display_bank
+.more   call    DIR128_INC_HL
+        jr      nc,.copy
+dir_display_bank
+        ld      a,program_page
+        jp      PAGE128
 
 ;marking item=bit 0 in item attr byte
 ; --- DOKUMENTACE CZ: mark_item ---
@@ -5383,11 +5247,7 @@ block_asci	ds	10		;blocks converted to ASCII, (used by progress display)
 ;a pointer directly into banked directory RAM.
 dir_print_buf	ds	line_length+1
 
-;128K directory rolling state (fixed RAM, below #C000)
-roll_addr	dw	#C000
-roll_page	dw	ftp_dir_page+1
-roll_pos	dw	0
-roll_max	dw	0
+; Directory display/rolling state lives in program bank 6.
 
 
 
@@ -9912,7 +9772,11 @@ flag_dir	db 0		;IX+1, flag related to dir
 				;bit 6= direction we go. 1= enter dir, 0= going updir
 				;bit 7= are we testing first item "Total XY"?, 0=no, 1=yes
 ud_speed	db 16		;IX+2, normal traffic3456000; upload temporarily selects2304000
-flag2		db 0		;IX+3, print send command,0=NO, 1=YES
+        IFDEF bs_dos
+flag2           db #20          ;IX+3: default Delete=Y (bit 5), Run=Y (bit 6 clear)
+        ELSE
+flag2           db 0            ;ESXDOS: TAP deletion disabled
+        ENDIF
 						;bit 5 = smazat puvodni TAP po uspesnem rozbaleni: 0=NE, 1=ANO
 						;bit 6 = zustat v Sare po rozbaleni:               0=spustit, 1=zustat
 		db #20		;IX+4, free for use (maximum number of raw data reread, see "rece_loop")
@@ -10053,6 +9917,7 @@ total_len	equ $-start_ldir
         ORG #C000
 program_page_start:
         INCLUDE "find_input_bank.asm"
+        INCLUDE "directory_display_bank.asm"
         IFDEF bs_dos
         INCLUDE "2nd_program_bank.asm"
         ELSE
