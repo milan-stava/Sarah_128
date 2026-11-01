@@ -1308,6 +1308,7 @@ fuf4		jp	z,clear_edit_zone
 		jr	fuf3			;endless loop!!!!
 
 fuf2		push	hl
+        call ftp_upload_baud_begin
 
 		call	send_type_command_i	;switch to TYPE I (binary)
 		call	enter_passive_mode
@@ -1329,7 +1330,7 @@ fuf6		ld	bc,#5555
 		call	save_dir_position_snapshot	;save current directory position, so that we can return to it after upload
 		ld	a,dwnld_pag
 		call	PAGE128
-		call	set_7mhz		;nemuzu upload dostat na vic nez 3,5Mhz, proc??????
+		call	set_7mhz		;isolate UART2304000 with 7 MHz DATA
 
 		ld	de,uploading_file		;for test purposes only
 		call	print_ez1
@@ -1392,6 +1393,7 @@ ftp_upl_end
         call print_ftp_message
         ld (ix+23),0
         call set_3_5mhz
+        call ftp_upload_baud_restore
         jp directory_retrieve
 ful_abort  call set_3_5mhz
            res 4,(ix+3)
@@ -1417,7 +1419,7 @@ ful_abort_final_code
            ld c,16
            jp nz,error_handler    ;never send TYPE after an unconfirmed ABOR
 ful_abort_done
-
+           call ftp_upload_baud_restore
            ld (ix+23),1
            call print_transfer_status
            call directory_retrieve
@@ -1457,9 +1459,9 @@ ftp_upl_send	ld	(ftp_upl_len),bc
 		jp	c,ful_abort
 ;		jp	c,error_handler
 		call	set_7mhz
-        ld      bc,#1500        ; diagnostic guard: about 20 ms at 7 MHz after '>'
+		ld      bc,#1500        ; about 20 ms at 7 MHz after the ESP prompt
 upl_tx_start_wait
-        dec     bc              ; give ESP time to enter its serial data receiver
+        dec     bc
         ld      a,b
         or      c
         jr      nz,upl_tx_start_wait
@@ -7658,7 +7660,10 @@ error_handler xor a
            bit 6,(ix+0)
            jr z,error_handler_exit
            call passive_receive_off
+           call ftp_upload_baud_restore
 error_handler_exit
+           ld a,#FF             ; failed cleanup: no further AT commands at an unsafe link
+           ld (ftp_upload_baud_saved),a
            xor a
            ld (error_recovering),a
            bit 6,(ix+0)
@@ -9906,7 +9911,7 @@ flag_dir	db 0		;IX+1, flag related to dir
 				;bit 5= temporary flag, item being read in is file or dir, 0=file, 1=dir
 				;bit 6= direction we go. 1= enter dir, 0= going updir
 				;bit 7= are we testing first item "Total XY"?, 0=no, 1=yes
-ud_speed	db 12		;IX+2, test upload stability at 1152000 baud (was 16=3456000)
+ud_speed	db 16		;IX+2, normal traffic3456000; upload temporarily selects2304000
 flag2		db 0		;IX+3, print send command,0=NO, 1=YES
 						;bit 5 = smazat puvodni TAP po uspesnem rozbaleni: 0=NE, 1=ANO
 						;bit 6 = zustat v Sare po rozbaleni:               0=spustit, 1=zustat
@@ -9965,6 +9970,7 @@ buffers_len	equ $-RX_buf
 	include "ftp_directory_io.asm"
 	include "wifi_protocol.asm"
         INCLUDE "ftp_recovery.asm"
+        INCLUDE "ftp_upload_baud.asm"
 
 bios_start
 		INCBIN "WifiBios20_MB_EL.cod"

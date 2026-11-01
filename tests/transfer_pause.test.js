@@ -68,7 +68,7 @@ function transferPauseRegression(makeCpu,image,bios,S,bank6) {
   let u,error=0,keyPolls=0;
   u=makeCpu([],bios,S,{image,onPoll(n,rx){if(n===2200000)rx.push(...Array.from('SEND OK\r\n',c=>c.charCodeAt(0)));if(n>2210000)throw Error('delayed ACK was not consumed');},hook(pc,r){
    if(pc===S.inkey){keyPolls++;return {ret:true,a:0};}
-   if(pc===S.set_7mhz)return {ret:true};
+   if(pc===S.set_7mhz||pc===S.set_20mhz)return {ret:true};
    if(pc===S.error_handler){error=r.bc&255;throw stop;}
    if(pc===S.send_string||pc===S.send_data)throw Error('delayed ACK caused payload replay');
   }});
@@ -79,7 +79,7 @@ function transferPauseRegression(makeCpu,image,bios,S,bank6) {
  for(const notice of ['0,CLOSED','1,CLOSED','WIFI DISCONNECT']) {
   let aborted=0;
   const u=makeCpu([],bios,S,{image,hook(pc,r){
-   if(pc===S.set_7mhz)return {ret:true};
+   if(pc===S.set_7mhz||pc===S.set_20mhz)return {ret:true};
    if(pc===S.ful_abort){aborted=r.bc&255;throw stop;}
    if(pc===S.error_handler)throw Error('known connection loss waited for UART timeout');
   }});u.m[S.at_closed]=0;u.rx.push(...Array.from(notice+'\r\n',c=>c.charCodeAt(0)));

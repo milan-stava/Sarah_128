@@ -8,7 +8,7 @@ function uploadWaitRegression(makeCpu,image,bios,S) {
   const u=makeCpu([],bios,S,{image,onPoll(n){polls=n;if(n>3000000)throw Error('wait ignored cancellation/terminal');},hook(pc,r){
    if(pc===S.clear_rece_buf){drains++;return {ret:true};}
    if(pc===S.inkey)return {ret:true,a:failure==='cancel'&&polls>=600000?98:0};
-   if(pc===S.set_7mhz)return {ret:true,a:1,z:false,carry:true,bc:0x793b,hl:(r.hl&0xff00)|0x30};
+   if(pc===S.set_7mhz||pc===S.set_20mhz)return {ret:true,a:3,z:false,carry:true,bc:0x793b,hl:(r.hl&0xff00)|0x30};
    if(pc===S.error_handler){error=r.bc&255;throw stop;}
    if(pc===S.ful_abort){abort=r.bc&255;throw stop;}
   }});
@@ -39,6 +39,21 @@ function uploadWaitRegression(makeCpu,image,bios,S) {
   assert(!u.call(S.check_module_answer,{hl:S[name]}).carry,'requested terminal '+name);
   assert(String.fromCharCode(...u.rx)==='NEXT','no flush after '+name);
  }
+ // Actual BIOS byte sends: preserve payload and honor UART backpressure.
+ for(const length of [0,1,2048])for(const hold of [0,4,64]) {
+  const payload=Array.from({length},(_,i)=>i*37&255);
+  const u=makeCpu([],bios,S,{image,speed:1,txHoldPolls:hold,checkTxReady:true});
+  u.m.set(payload,0x5000);
+  const r=u.call(S.send_data,{hl:0x5000,bc:length});
+  assert(r.z&&r.bc===0&&r.hl===0x5000+length,'all bytes handed to UART in order');
+  assert(u.sent.length===length&&u.sent.every((v,i)=>v===payload[i]),'binary bytes survive UART busy intervals');
+ }
+ {
+  const u=makeCpu([],bios,S,{image,speed:1,txStuckAt:4,checkTxReady:true});
+  u.m.set(Array.from({length:16},(_,i)=>i),0x5000);
+  const r=u.call(S.send_data,{hl:0x5000,bc:16});
+  assert(!r.z&&r.bc===12&&r.hl===0x5004&&u.sent.length===4,'stuck UART never reports a partial block as complete');
+ }
  // BS-DOS multi-bank loop through normal CIPCLOSE/226 and directory refresh.
  if(S.cfg_read_file!==undefined)for(const total of [32768,307201])for(const early226 of [false,true]) {
   let u,loaded=0,sent=0,portionStart=0,closed=false,refreshed=false,command='',blocks=0,speed=7,delayedAck=0,pausedReads=0,guardLoops=0;
@@ -55,7 +70,7 @@ function uploadWaitRegression(makeCpu,image,bios,S) {
    if([S.ful_abort,S.error_handler].includes(pc))throw Error('long upload error '+(r.bc&255));
    if(pc===S.display_progress||pc===S.print_ftp_message)return {ret:true};
    if(pc===S.at_wait_send||pc===S.check_module_answer)assert(speed===20,'AT confirmations read at 20 MHz');
-   if(pc===S.upl_tx_start_wait){if(!guardLoops)assert(speed===7,'post-prompt guard runs at data clock');guardLoops++;}
+   if(pc===S.upl_tx_start_wait){if(!guardLoops)assert(speed===7,'post-prompt guard runs at 7 MHz');guardLoops++;}
 
    if(pc===S.load_file){
     const n=Math.min(16384,total-loaded);assert(n>0,'no extra disk read');portionStart=loaded;loaded+=n;
@@ -77,8 +92,8 @@ function uploadWaitRegression(makeCpu,image,bios,S) {
     return {ret:true,z:true};
    }
    if(pc===S.send_data){
-    assert(speed===7,'binary transmission stays at 7 MHz');
-    assert(guardLoops===0x1500,'every block waits after its prompt before sending bytes');guardLoops=0;
+    assert(speed===7,'binary transmission runs at 7 MHz');
+    assert(guardLoops===0x1500,'every block retains about 20 ms after its prompt');guardLoops=0;
     assert(r.hl===0xc000+sent-portionStart,'buffer pointer across 16KB portions');
     assert(r.bc>0&&r.bc<=2048,'bounded data chunk');
     for(let i=0;i<r.bc;i++)if(r.m[r.hl+i]!==((sent+i)*37&255))throw Error('wrong disk payload');

@@ -39,6 +39,7 @@ ftp_recovery_begin:
         jp      c,ftp_recovery_failed
         call    at_reset_stream
         call    passive_receive_off
+        call    ftp_upload_baud_restore ; link is now idle; restore before the new login
         ld      sp,basic_end-2  ; discard calls belonging to the failed operation
         ld      hl,ftp_recovery_done
         push    hl

@@ -1,6 +1,6 @@
 param(
     [string]$Port = 'COM6',
-    [int]$Baud = 1152000,
+    [int]$Baud = 2304000,
     [string]$OutputDirectory,
     [int]$Seconds = 1800
 )

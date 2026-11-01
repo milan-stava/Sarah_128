@@ -1,3 +1,238 @@
+## ZAVER1.11.2026: zakladniuploadotestovan,commit+pushzadany
+
+Uzivatel vyslovne: uploadtednechat,jakje, commitspoznamkouapushnaGit.
+Zvolena konecnaprofil: normal3456000Bd, uploaddocasne2304000Bd,
+DATA7MHz,prompty/ACK20MHz,~20mspauzapo>. SNA/Z80overene, TAPswitcheTODO.
+UploadzakladneHWoveren(dvauplne344602B/hash/226/navratLIST/PWD).
+Sirsierrorpodminkynepovazovatzaabsolutnevyresene;automatickeUARTrestore
+ma46simulacnichregresi705102checks+1067TAPhandoff. Zdrojbezezmenynovehojednani.
+
+NEWznovupotvrzen1.11session70 17:57:00Praha:
+STOU GAUNT3.TAP ->500Syntaxerror,commandunrecognized; ABOR->226success.
+COMnova session66185 READY2304000Bd8N1 od16:56:24UTC,
+temp/sara-uart-20261101-165624/,limit1800s. ZachycenSTOU,ABOR a
+AT+UART_CUR=3456000,8,1,0,0 (pozadaveknavratubaudu). PrijemCELEdalsikomunikace
+na3456000fixed2304000captureuznezachyti. NevydavatpozadavekzaovereneACK.
+PriprotoOLDserveruNEWnepodporovano. UzivatelvybralNEOPRAVOVATted.
+
+Tento stav ukladan podcommitnazvem
+"Keep basically tested upload settings and restore normal UART baud".
+Pushcil origin/fix-ftp-directory. Presnycommithash/pushstavoveritgitlog/
+gitstatusvsorigin (checkpointpripravenpredgitoperaci, netvrdiuspechpredem).
+AktualniTAPhash03BE8B9A92D3FD7DD668D37BCB0207E479E76BCCB245FD2B7F7B58546A3180FF,
+je shodnynalokalnimFTP. Volno5911BpredBFE0,HGFXOFF.
+Dalsiprace: TAPdelete/run/stayswitche, pripadne NEWfallback aznovymzadanim.
+## ZVOLENA KONECNA KONFIGURACE UPLOADU1.11.2026
+
+Uzivatel sezeptal,zdaaktualniverzema20mspauzu,a vyslovne reklnechatjikonecnou.
+OVERENOvezdroji a shodnouTAP ve workspaceiFTP:
+- normalniprovoz3456000Bd(index16);
+- jenuploaddocasne2304000Bd(index15), popotvrzenemuklidunavratvstupnibaudu;
+- DATA7MHz,prompty/ACK20MHz;
+- pauza~20ms po>predkazdymdatovymblokem,BC1500/5376iteraci pri7MHz.
+Tato NASTAVENI UZ NEMENIT beznovehozadani. Neznamena dokoncenyTAPswitche
+ani vsechnyerrorpodminky. SNA/Z80 uzivatelemoverene, TAPvolbystaleTODO.
+Zdroj/binarnebezezmeny, pouzezapisrozhodnuti. Zadnynovycommit/push.
+SARA_LOADER.tap obaSHAs:
+03BE8B9A92D3FD7DD668D37BCB0207E479E76BCCB245FD2B7F7B58546A3180FF.
+Posledniovereni46regresi705102assertions+1067TAPhandoff,free5911BpredBFE0.
+Poslednicommit2589400je starsi1152000checkpoint;aktualnizmenyjsounecommitovane.
+Dalsipripadnytestoveritbaudprepinani/abort/restore, ne honitrychlost.
+## UPRESNENI MERENI1.11.2026: GAUNTcasoveodpovida STOR/upload
+
+Uzivatel nazyva38sGAUNT3priindex12i15stahovanim, ale noveproctenylogsession70
+ukazujeSTORGAUNT3 17:45:11->22617:45:50 (39s) a17:46:46->22617:47:23(37s).
+Casoveodpovidaobema~38smereni; STORjeUPLOADnaFTP. Neukladat jakoovereny
+benchmarkDOWNLOAD/RETR. Dosavadniodstavce nize zachovavajiuzivatelovopojmenovani.
+V17:49:10->22617:49:34jedalsiSTOR24s; posledniSTOR17:49:49 pri kontrole bez226.
+Nelze bezdalsichudaju priraditjednotlivympokusumpresnybaudneboverzi.
+Zaverpro38spri12a15: vyssibaudsamvtestunepomohl; presnybottleneckneznamy.
+Kodbezezmeny,novyFTPbuild03BE...jeporadaktualni.
+## AKTUALNI1.11.2026: normal3456000, upload2304000,38sdownloadobaindexy
+
+Uzivatel vyslovne zadal normalniprovoz3456000, jenuploadnizsi.
+Dokonceno: defaultud_speed16=3456000, fuf2predTYPE/PASV/STORuloziverifbaud
+a prepne2304000(index15). DATA7MHz,prompty/ACK20MHz,20mspauzavrácena.
+Novyftp_upload_baud.asm sdili existujiciset_ud_speed_a+find_out_speed.
+Normalnidokonceni po226 a potvrzeneABOR predLISTobnovivstupnibaud.
+Komunikacniobnova nejprveuzavreoldsockety+active modepriuploadbaudu,
+pakobnovibaudprednovymloginem. BeznachybaobnovipoUSPEsnemuklidu.
+Neuspesny/neoverenyuklid dalsiATbaudnaslepoNEposila; vymazemarker.
+Restoremarkermazepredzmenou, abysenezacyklil. ATdefaultneniprepsanna15.
+Actualget_baudresiipolovicatouchybuswitchsezastaralymcachedflag7.
+
+Obapreklady0errors/0warnings,HGFXOFF;46regresi705102assertions0failures,
+navicTAPhandoff1067. Novetestupload_baud28checks/build.
++78B proti2304000/7MHzS20mspauzou: biosA6A9/konecA8C9,
+volno5911BpredBFE0,banka6B8E2958Bbezezmeny. HWswitchingjesteCEKA.
+Audit tests/upload-baud-switch-audit.md.
+NovaTAPi D:/zx/SARA_LOADER.tap hash03BE8B9A92D3FD7DD668D37BCB0207E479E76BCCB245FD2B7F7B58546A3180FF.
+ZalohaFTPC:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-upload-baud-switch-20261101-164652.tap.
+Beznovéhocommitu/pushe. Poslednicommit2589400(1152000baseline).
+PozorCOMfixed2304000ctepouzeupload, obecnyprovoz3456000nutneprepnoutmonitor.
+NoveCOMnynineotvirano; posledni80955uzskoncilcasovym limitem31.10.
+
+Uzivatel38sekGAUNT3.TAPpriindex12 a index15, vyjasnilze jdeostahovani.
+ZaznamenatjakoUZIVATELSKEdownloadmereni1152000i2304000stejne38s.
+NEplestspredchozimilogovymiSTORcasystare61s/nove40,46,50s.
+Toznamena,zevyssibaudvtomtokonkretnimdownloadtestunepomohl; presnou
+brzduCPU/DOS/modul/WiFiztohoNEURCIME a neprokazujevsechnybaudyzbytecne.
+
+Stary1152000downloadSARA_LOADER27733B: logsession64 RETR14:24:16/226
+stejnasekunda(jenserverovycas). Capture131813nemačitelnýRETR,
+nelzezetohopoctivedatcelkovyčasulozeniSary. Teduzivatelzmerilsam38sGAUNT3.
+Dalsikrok: novouTAPnacist,overitgeneral3456000->upload2304000->3456000,
+dokonceni iBcancel/komunikacnirecovery, pakazpripadneoptimalizace.
+Zadnynovyzásah pro dalsirýchlost nanovelatestdiskusi.
+## AKTUALNI1.11.2026: bezpauzy ted1upload50s a obsahOK, jenrozborrychlosti
+
+Uzivatel zmerilstaraSara pri7MHz61s, potom nova2304000/7MHzBEZ20mspauzy50s.
+Overenlogsession69: starymerenySTOR16:23:38->22616:24:38 (~60s),
+novySTOR16:30:20->22616:31:10 (50s), nasledneLIST226/PWD257.
+ServerGAUNT3.TAP344602B SHA256presneshodnyspredchozimoverenymCOMpayloadem.
+Tedytentokonkretnibezpauzovypokus dokoncil aobsahOK. Predchozibezpauzovy
+pokus31.10ovsemerror43aposkozenyposledniblok, neniobecnedeclaredstable.
+
+Casyhistorie:2304000/7MHzS20mspauzou40s a46s (obaobsah/226overeny).
+Drive3456000/7MHzBEZpauzyjednou35s, aleopakovanevytuhy.
+20mspauzax169bloku=3.38s samotnacena; rozdily40-50snutneovlivnujeidalsirezie/
+spojeni, nejsoucistymmeritkemvypnuti/zapnutipauzy.
+KEYSCANbezstiskuklavesyreturndelabezcekani, takze nejdeovzdyvkladanydelay.
+Mozne dalsi optimalizacezatimjenkrozboru: zmeritcasdisku, DATAaSENDOK;
+rychlejsiperbyteTXmuzesimulovatproblemysrychlejsimCPU. Uzivatel sejenpta,
+ZADNAnovauprava kodu/TAP/baudu/CPU. AktualniFTPporadBEZpauzyhashD9D860...
+COMstary80955 automatickylimitupravdepodobneukoncen; nehlasitbezovereni.
+## AKTUALNI31.10.2026: bez20ms error43 A POSKOZENY POSLEDNIBLOK
+
+Uzivatel hlasi43; overenologsession67 STOR22:05:56/150, bez226.
+COM205104:61uplnychbloku124928B, potomAT+CIPSEND0,6 (ABORrequest bezpayloadu),
+AT+CIPCLOSE5.43 pravdepodobne azclose/recovery, prvniATevent neznamy.
+NMI64E4/7F27nedodan (uzivateluznemelnovouSaruvpameti).
+
+DULEZITY NOVY DUKAZ: serverpartial124928B NENI obsahoveshodny.
+Prvnirozdil offset123229 od0 = blok61byte349, celkem1624rozdilnychbajtu.
+Pritom aktualniodchozi124928B presne odpovidaji stejnemuprefixu predchoziho
+uspesneho344602Bzaznamu! Servernesouhlasi sobema. Tedy odchozidatazCOMspravna,
+rozdilvznika azpo odposlechnutemTX. Konkretni fyzickapricina NEPROKAZANA.
+Vserverfile NENI textAT+CIPSEND0,6/CIPCLOSE5/UART_CUR; netvrditzeATvtelese.
+Srovnani jsou nad presneSTORsegmentyCOM, nejdeopredchozistaryupload.
+Audit tests/upload-no-delay-audit.md doplnen vysledek nahore.
+
+Uzivateljde sdetmispata vrati se, muzepakpridalsimpokusuopsatNMI.
+Chce prehledzjisteni, asi vratit20mspauzu, takezjisti rychloststarehouploadu.
+Zatim ZADNA dalsiuprava kodu/FTP: aktivniTAP2304000/7MHzBEZpauzy
+hashD9D8602382793CC4DFCF4A03440A46C68B9DBD31CC5111F0CE980852CA024D6A.
+Navrzeny dalsikrok: obnovitoverenou20mspauzu2304000/7MHz,2uploady+hash,
+pripadnepriopakovanichyb zachytitPC/SP/ATevent predresetem. NMIadresyvzdyzeSYM.
+OVERENYfallbackS20ms: temp/SARA_LOADER-before-2304000-14mhz-20261031-210034.tap,
+hash5C0F15B0A42F1EDFCBF204E4D314DF7500B080E234DB59D48475C46BE238DD5C.
+2predchoziHWuploadyspauzouobsahspravny344602B/226/LIST/PWD.
+COM80955capture205104,2304000Bd, limit21:21:04UTC; po navratuoverit/restartovat.
+Zadnynovycommit/push. Poslednicommit2589400 je1152000/7MHzSpauzou.
+## AKTUALNI31.10.2026:2304000/7MHz BEZ20mspauzy, TAPnaFTP
+
+14MHzpokus selhalprvniblok: session66 STOR22:01:59Praha/150, COM1x2048B
+a potom ticho, server0B. Uzivatel vidi20MHzindikator = ACKcekani, DATAbylo14.
+Uzivatel vyslovne zadal vratit7MHz a takeODSTRANIT20mspauzu.
+Hotovo: DATA/setup/postACK7MHz, UART15=2304000 zustava, prompty/ACK20MHz.
+Odstranena8Bpauza i uznepouzity4Bset_14mhzhelper. Ostatnibezemeny,HGFXOFF.
+Obapreklady0errors/0warnings;44regresi704378assertions0failures,
+navicTAPhandoff1067. BIOSA653/konecA873, volno5997BpredBFE0, bankaB8E2958B.
+Audit tests/upload-no-delay-audit.md. Novecekame2HWuploady BEZpauzy.
+
+FTP D:/zx/SARA_LOADER.tap SHA256overen:
+D9D8602382793CC4DFCF4A03440A46C68B9DBD31CC5111F0CE980852CA024D6A.
+Zaloha14MHz:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-2304000-7mhz-no-delay-20261031-210412.tap.
+OVERENYfallback2304000/7MHzS20mspauzou (2uploady/hash/226/LIST/PWD)zustava:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-2304000-14mhz-20261031-210034.tap,
+hash5C0F15B0A42F1EDFCBF204E4D314DF7500B080E234DB59D48475C46BE238DD5C.
+COM80955overenobezicipoFTPkopii,2304000Bd8N1,capture205104,
+limit21:21:04UTC/22:21:04Praha. Zadnynovycommit/push,baselinecommit2589400.
+Dalsikrok: novouTAPnacist a2uploady, posouditvlivodstranene20mspauzy.
+## AKTUALNI31.10.2026:2304000/7MHz2xHWOK, pripraveno14MHz
+
+Uzivatel potvrdil2uploady2304000/7MHz. Navicovereno:
+session66 STOR21:56:30->22621:57:16 a STOR21:57:41->22621:58:21Praha;
+oba nasledovaneLIST226/PWD257. Capture205104 offsety13857/362854:
+kazdy169bloku344602B, SHA256kazdehoshodny se serverGAUNT3.TAP344602B.
+Tedy overenykompletniprenos i obsah a navratadresare protyto2pokusy.
+Tuto verzi povazujeme za overenyfallback (ne vsechnyWifi/errorpodminky).
+
+Uzivatel zadal pouzeDATAclock14MHzpri stejnem2304000baudu.
+NovaTAPpripravena: set_14mhz selektor2 (+4B), DATA/setup/postACK14MHz.
+Prompty/ACK20MHz aUI3.5MHz zustavaji; pauzapo>10752iteraci/#2A00
+zachovava~20mspri14MHz. Jinak protokol/chunks/cekanicancelbezezmeny,HGFXOFF.
+Obapreklady0errors/0warnings,44regresi705046assertions0failures,
+navicTAPhandoff1067. BIOSA65F/konecA87F, volno5985BpredBFE0, bankB8E2958B.
+Audit tests/upload-2304000-14mhz-audit.md. Cekaji2HWuploady14MHz.
+Pokudneprojdou,uzivatelchcezustatuoverene2304000/7MHz.
+
+Nova D:/zx/SARA_LOADER.tap SHA256overen:
+403A43A6EBD5B6B05561F3B9B3996E266C8B9B2EC21E955B5C2608A3495E5A80.
+FUNKCNI7MHzTAPzalohovana:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-2304000-14mhz-20261031-210034.tap
+SHA2565C0F15B0A42F1EDFCBF204E4D314DF7500B080E234DB59D48475C46BE238DD5C.
+COM80955overenobezici po kopii,2304000Bd8N1, capture205104,
+limit21:21:04UTC/22:21:04Praha. Prednovymtvrzenimaktivituoverit.
+Zadne dalsicommit/push. Predchozicheckpoint1152000/7MHzje2589400.
+## AKTUALNI31.10.2026: NOVATAP2304000/7MHz naFTP, cekaHW
+
+Po stallu prvniho2048Bbloku na2304000/20MHz uzivatel schvalil izolovany
+pokus2304000/7MHz. PripravenoaFTPaktualizovano. Prompty/ACK20MHzzustavaji,
+DATA a inicialniuploader7MHz. Pauzapo>zpet5376iteraci/#1500 (~20ms na7MHz).
+Ud_speed15=2304000 zustava. Bloky/protokol/cekanicancel bezezmeny, HGFX OFF.
+Oba preklady0errors/0warnings;44regresi705046assertions0failures.
+Velikostbezezmenyvolno5989B/bankaB8E. Srovnani se1152000/7MHzbaseline:
+jediny zmeneny mainbajt8E61 (12->15), banka6identicka.
+Tedy proti uzivatelem overene baseline ted menime POUZEbaud.
+ZatimNEovereno2uploady, zadnynovycommit/push. Baselinecommit2589400.
+
+D:/zx/SARA_LOADER.tap SHA256shodny sworkspace:
+5C0F15B0A42F1EDFCBF204E4D314DF7500B080E234DB59D48475C46BE238DD5C.
+Zaloha predchozi20MHzFTPkopie:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-2304000-7mhz-20261031-205506.tap.
+COM80955 overeno bezici po kopii,2304000Bd8N1,temp/sara-uart-20261031-205104/.
+Limit21:21:04UTC (22:21:04Praha); azuzivatelzavola overitaktivitu.
+Dalsikrok: nahratNOVOUtap, dvaGAUNT3uploady, posoudit226/hash/LIST/PWD.
+## HWTEST2304000/20MHz: zastavil uz po prvnim bloku
+
+Uzivatel nactenou novouTAP potvrzuje zamrznuti/cojeCOM.
+Logsession65: RETR SARA_LOADER.tap21:52:04/226, startupLIST/PWD21:52:15.
+STORGAUNT3.TAP21:52:46/150, bez226 pri21:53:14kontrole.
+COM205104: pouze1 CIPSEND1,2048, presne2048payloadbajtu pote, celkem5870B.
+Poslednidata20:52:46.475UTC, potezadnydalsiATprikaz. Serverfile0B.
+Tedy stalli pri prvnim bloku na2304000/20MHz. Baud vsCPUzatimnerozliseno;
+1152000/7MHz uzivatelemprochazel, tedzmenenyobeveliciny dlejeho zadani.
+Mozny dalsi izolovanytest2304000/7MHz s~20mspauzou, ale zatimneproveden.
+Zadne dalsizmeny kodu. COM80955 stale zaznamenava2304000,limit21:21:04UTC.
+## AKTUALNI31.10.2026: pripraveno2304000baud/20MHz pro2uploady
+
+Uzivatel POTVRDIL nizsi1152000/7MHzuploadprochazi (pocet neuvedl).
+Drivezadany lokalnicommit dokonceny:2589400
+"Checkpoint upload diagnostics at 1152000 baud". ObsahujeWIPupload,
+SNA/Z80hardwareOK aTAPswitcheTODO. Zadnypush.
+Aktualnipokus2304000/20MHz zatimNEcommitovan, baseline1152000 zachovana.
+
+NovaTAP: ud_speed15=2304000, DATA i prompty/ACK20MHz. Po>15384iteraci
+#3C18 misto5376/#1500, pauza zustava~20ms pri20MHz. UI3.5MHzbezezmeny.
+HGFX OFF, zadnazmenaostatnichprotokolu/chunks/cekanicancel/obnovy.
+Velikost+0B: biosA65B/konecA87B, volno5989B predBFE0, banka6B8E2958B.
+Obapreklady0errors/0warnings,44regresi705046assertions0failures,
+navic1067TAPhandoff. Audit tests/upload-2304000-20mhz-audit.md.
+Zatim CEKA2realneuploady a jejich226/obsah/navratadresare.
+
+TestTAPi D:/zx/SARA_LOADER.tap, shodaSHA256 overena:
+D09FAF553AEC2BFCFC94E3103E52BAC41EA63AF57C5BA729908C253907D04B94.
+ZalohaFTP1152000:
+C:/Users/milan/AppData/Local/Temp/SARA_LOADER-before-2304000-20mhz-20261031-205102.tap.
+COM6stara81387/capture131813 skoncila1053109B.
+NOVYCOM6 READY2304000Bd8N1 receive-only,session80955.
+Capture temp/sara-uart-20261031-205104/, limit1800s od20:51:04UTC
+(21:51:04Praha),konci21:21:04UTC/22:21:04Praha. Stop souboremstop.
+Odposlech spravny az novaSara prejde2304000; EL/stazeni muze bezet jinymbaud.
+Dalsikrok: uzivatel nacteNOVOUtap, overi2304000+20MHz,2xGAUNT3,
+potomoveritCOMaFTPlog226,celouvelikost/hash a LIST/PWD. Kodneni HWoveren.
 ## POTVRZENO UZIVATELEM:1152000baud/7MHz upload prochazi
 
 Uzivatel po navratu potvrdil, ze nizsi1152000 pri7MHzupload prochazi.

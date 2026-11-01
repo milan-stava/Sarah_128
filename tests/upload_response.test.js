@@ -47,7 +47,7 @@ function uploadResponseRegression(makeCpu,image,bios,S) {
    if(pc===S.display_error){assert(slow&&r.bc%256===15,'original disk error and safe clock');displays++;return {ret:true};}
    if(pc===S.wifi_unwait)return {ret:true};
    if(pc===S.passive_receive_off){cleanups++;if(!failedCleanup)return {ret:true};}
-   if(pc===S.error_handler_exit+4){assert(r.m[S.error_recovering]===0,'recovery guard reset');throw stop;}
+   if(pc===S.initsp_keyloop){assert(r.m[S.error_recovering]===0,'recovery guard reset');throw stop;}
   });
   u.m[S.flag1]|=64; // This test starts during an initialized FTP session.
   if(failedCleanup)u.m.set([0x0e,39,0xc3,S.error_handler&255,S.error_handler>>8],S.passive_receive_off);
