@@ -6,7 +6,7 @@ function startupResumeRegression(makeCpuBase,image,bios,S) {
  }});
  let checks=0;
  const assert=(v,s)=>{if(!v)throw Error(s);checks++;};
- const stop={},drawNames=['PRINTHL','prn_w_onoff','prn_alogin','prn_lst_nlst_abbr_ful','prn_file_start','prn_host_usr_psw','print_title','print_working_directory','print_dir_files_items','print_page','prn_mark_items','draw_cursor'];
+ const stop={},drawNames=['PRINTHL','print_menu','print_dir_menu','prn_w_onoff','prn_alogin','prn_lst_nlst_abbr_ful','prn_file_start','prn_host_usr_psw','print_title','print_working_directory','print_dir_files_items','print_page','prn_mark_items','draw_cursor'];
  const ptrs=['cur_item_addr','cur_item_addr_page','item_pg_start','item_pg_start_page','cursor_w_curad','dir_list_pointer'];
  for(const valid of [false,true,'corrupt']) {
   let events=[],u;

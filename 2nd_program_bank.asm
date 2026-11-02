@@ -15,10 +15,15 @@ load_cfg:
 ; OUT: NC, HL=buffer, BC=length, zero-terminated; C=missing/oversized/empty CFG.
 cfg_read_file:
         ld      hl,cfg_name
+        IFDEF bs_dos
 	call	file_exist+3
 	jr      nz,.bad
 
 	call	load_init
+        ELSE
+        call    cfg_esx_open
+        ret     c
+        ENDIF
         ld      hl,(blen+2)
         ld      a,h
         or      l
@@ -31,20 +36,33 @@ cfg_read_file:
         jr      nc,.bad
 
 .load_body:                     ; help reuses the read without CFG length checks
+        IFDEF bs_dos
 	ld	ix,cfg_file_here
 	push	ix
 	call	load_file+4		;nahraj cfg soubor
 
 	ld	bc,(flen)
 	pop	hl
+        ELSE
+        call    cfg_esx_read
+        ret     c
+        ENDIF
 	push    hl
 	add	hl,bc
 	ld	(hl),0			;uzavri konfigurak nulou
         pop     hl
         or      a
         ret
-.bad:   scf
+.bad:
+        IFNDEF bs_dos
+        call    cfg_esx_close
+        ENDIF
+        scf
         ret
+
+        IFNDEF bs_dos
+        INCLUDE "cfg_esxdos_bank.asm"
+        ENDIF
 
 
 ; HL = buffer, BC = length. Check end+1 before writing the sentinel.
@@ -650,6 +668,7 @@ cfg_title:          db "Your profiles:",0
 
 
 ;2) prace s TAPkou
+        IFDEF bs_dos
 work_tap	di
         bit     6,(ix+3)
         jr      z,.relocate
@@ -764,15 +783,22 @@ slb		ld	hl,txt_adr_edit_zone2
                 jp      snap_not_found
 
 nmi_not_found_txt db "Unsupported NMI menu",0
+        ENDIF
 
 ; Local help shares CFG's disk reader and free bank-6 workspace.
 ; The distributed sara.hlp is assumed to fit, as requested by the user.
 help_bank:
         ld      hl,help_name
+        IFDEF bs_dos
         call    file_exist+3
         jr      nz,.missing
         call    load_init
+        ELSE
+        call    cfg_esx_open
+        jr      c,.missing
+        ENDIF
         call    cfg_read_file.load_body
+        jr      c,.missing
         ld      ix,flag1
         ld      (text_local_base),hl
         ld      (text_length),bc
@@ -786,11 +812,15 @@ help_bank:
         call    cls_4000
         call    print_screen_layout
         jp      print_title     ; directory is redrawn from fixed RAM after return
+        IFDEF bs_dos
 help_name db "sara.hlp  "
+        ELSE
+help_name db "sara.hlp",0
+        ENDIF
 help_missing db "sara.hlp not found",0
 
         INCLUDE "text_viewer_bank.asm"
 
-cfg_file_here:
+cfg_file_here equ program_page_end
 cfg_capacity equ #FFFF-cfg_file_here  ; last byte reserved for zero terminator
         ASSERT cfg_capacity > 0

@@ -1,3 +1,63 @@
+## 2. 11. 2026: uzivatel zadal commit a push celeho ESXDOS kroku
+
+Commit zahrnuje ESX TAP/SNA/Z80/TRD/SCL loadery, nativni diskove opravy,
+spolecne G/K, kompletni Save V vcetne banky6 na obou DOSech, menu/help,
+odstraneni mrtveho kodu, testy a sestavene TAP/LST/SYM vystupy.
+Cil fix-ftp-directory -> origin/fix-ftp-directory. Vysledek operace overit
+pomoci git log/status a shody HEAD s origin/fix-ftp-directory.
+HW testy uvedene nize stale cekaji; automaticke testy nejsou HW overeni.
+
+## 2. 11. 2026: spolecne funkce 128K, Save banky6 a audit hotovy
+
+ESXDOS: opravene lokalni cteni/zapis (cil C000, write flag0E, 32bit delky,
+hranice16K, kratke I/O a zavirani); G CFG a K sara.hlp jiz pro oba DOSy.
+V nove uklada komplet BASIC loader + hlavni kod + banku6 na obou DOSech.
+BSDOS ponechava ROM vystup, ESXDOS M_TAPEOUT do SAR12SAV.tap. ROM BREAK/error
+osetren ERR_SP, obnova stranky/IX/cache, ulozena kopie nema platnou dir cache.
+Vetsina noveho kodu a vsechny hlavni menu texty jsou v bance6; treti radek
+menu doplnuje chybejici kombinace. HGFX vypnut. Mrtve rutiny odstraneny
+konzervativne, fallthrough zachovan. Podrobnosti tests/esxdos-port-audit.md.
+
+Oba preklady 0 chyb/varovani. 61 regresnich behu / 1107151 assertions PASS,
+navic TAP handoff1071 PASS. Endpointy ROM/disku modelovane, nove HW testy NE.
+Proti stavu pred rozsirenim (jiz s ESX loadery): BSD podC000 -174B,
+banka6 +524B (celkem4056B); ESX podC000 -163B, banka6 +1839B (3058B).
+Volno doBFE0: BSD6280B, ESX6165B. Help do64 sloupcu, opravena i zastarala
+veta o ponechani TAP (nyni se ridi SS+T/CS+T).
+
+Pripraveny SARA_LOADER.tap (BSD) a SARA_ESX_LOADER.tap (ESX); male stare
+SARAH12*.tap obsahuji jen hlavni blok, pro 128K pouzit komplet *_LOADER.tap.
+Zadny novy commit/push ani kopie na FTP. Posledni commit stale f1badad.
+Dalsi krok: HW ESX G/K, V + znovunacteni na obou DOSech, upload/download
+(0/16K/vetsi), ESX starty/chybove navraty, pripony/rolovani, BSD TAP4 volby.
+
+## 2. 11. 2026: ESXDOS loadery preneseny na vcerejsi zaklad f1badad
+
+Uzivatel pri Save/Overwrite omylem vratil stary hlavni zdroj (mnoho regresi,
+21 chyb v kazdem prekladu). VYSLOVNE zadal pouzit vcerejsi commit jako zaklad
+a prenest jen jeho nove ESXDOS rutiny TAP, SNA, Z80, TRD a SCL.
+Originalni oba zdroje + diff jsou v TEMP/sara-user-esx-edits-20261102-111803/.
+Obnoveny sarah_ftp_client.asm a 2nd_program_bank.asm presne z f1badad;
+2nd_program_bank.asm zustava vuci HEAD nezmenen. Nove ESX vetve oddeleny do
+esxdos_launch_bank.asm (prikaz) a esxdos_launch_io.asm (terminalni API nizko).
+
+TAP M_TAPEIN/M_AUTOLOAD; SNA/Z80 snapload; TRD/SCL vdisk0 eject/mount a TRDOS.
+Vsechny5 typu se nejprve jednou stahnou a overi uspech. Puvodni ESX napady
+opraveny: bs_dos conditional, zapojeni banky6, download TRD/SCL, symbolicky
+offset item_extension (42), bezpecny INPBUFF misto prepisu pred exp_name,
+Carry/error navrat (IX, stranka, stack), zadny HALT/fallthrough snap->TRDOS.
+ESXDOS TAP se NEMAZE, BS-DOS prepinace/pripony/rolovani/upload/help zachovany.
+
+Oba preklady 0 chyb/varovani. BSDOS TAP BAJTOVE SHODNA s f1badad
+(Git blob b4e2af15546224f42e0b8f620532f4b84b1a834d), velikost/volno stejne.
+52 regresi 749874 PASS + TAP handoff 1071 PASS. ESX nove 42 scenaru/2482 PASS.
+ESX narust +142 B podC000 a +64 B banka6, volno doBFE0 6002 B, banka6 1219 B.
+Tests/detaily: tests/esxdos-launch-audit.md. Zadne nove HW overeni.
+
+Dalsi krok: HW test vsech5 ESX typu (SCL dle podpory nainstalovaneho VDISK),
+navrat pri chybe. Cekaji take vcerejsi testy pripon/rolovani a BSDOS TAP voleb.
+Novy commit/push ani kopie na FTP neprovedeny. Posledni commit stale f1badad.
+
 ## Commit/push tohoto kroku: zarovnane pripony a BS-DOS TAP volby
 
 Uzivatel vyslovne zadal commit a push vsech zmen od 03a1194.

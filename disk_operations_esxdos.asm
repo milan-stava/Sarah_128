@@ -88,7 +88,7 @@ F_STAT       equ #ac
 ;F_SET_DIR    equ $a9
 
 FA_READ      equ $01
-FA_OVERWRITE equ $0C
+FA_OVERWRITE equ $0E             ; create/truncate AND request write access
 ;FA_WRITE     equ $02
 ;FA_APPEND    equ $06
 
@@ -438,9 +438,11 @@ sif2         ld   bc,#5555           ; bc = bytes to write
              ld   a,(file_handle)    ; a  = file handler
              rst  $08
              db   F_WRITE            ; write file
-;	ld	c,7
-;	jr c,central_err	;po zprovoznění smazat
-		jr	c,disk_error
+        jp      c,disk_error
+        ld      hl,(sif2+1)
+        or      a
+        sbc     hl,bc
+        jr      nz,disk_error   ; incomplete write is not a successful download
 
 esx_count_save_len			;count if save will be whole buffer or less (in case of last part)
 		ld	hl,(disk_buf_len)
@@ -575,76 +577,52 @@ load_init	ld a,(file_handle)
 		ld bc,4
 		ldir
 
-li2		ld	bc,(rest_len+2)
-		ld	hl,(disk_buf_len)
-		ld	a,b
-		or	c	;or c= always NC, if higher 16 bit=non zero, jump with NC to li1
-		jr	nz,li1	;NZ=save the whole buffer
+; Select next read. C=last chunk (including exact buffer size), NC=more.
+li2     ld      bc,(rest_len+2)
+        ld      a,b
+        or      c
+        jr      nz,.full
+        ld      hl,(rest_len)
+        ld      bc,(disk_buf_len)
+        or      a
+        sbc     hl,bc
+        jr      c,.last
+        jr      z,.last
+.full   ld      hl,(disk_buf_len)
+        or      a
+        jr      .store
+.last   add     hl,bc
+        scf
+.store  ld      (lf2+1),hl
+        ld      (portion_len),hl
+        ret
 
-		ld	b,h
-		ld	c,l
-		ld	hl,(rest_len)
-		or	a
-		sbc	hl,bc
-		add	hl,bc		;if Z, set C as well
-		jr	z,li3
-		jr	c,li1
-		ld	h,b		;save last portion (=buffer length or less)
-		ld	l,c
-
-li1		ld	(lf2+1),hl
-li4		ld	(portion_len),hl
-		ret			;C=last part, NC= continuus part
-li3		ccf
-		jr	li1
-
-
-
-
-
-
+; Keep the current read length separate from the next request.
 fRead
-load_file	ld a,(file_handle)
-		ld ix,basic_end			;address where to load
-lf2		ld bc,#5555			;length
-		ld (lf3+1),bc
-		rst 8
-		db F_READ
-;	ld	c,5
-;	jp c,central_err	;po zprovoznění smazat
-		jp c,disk_error
+load_file
+        ld      a,(file_handle)
+        ld      ix,ftp_dir_start
+lf2     ld      bc,#5555
+        ld      (lf3+1),bc
+        rst     8
+        db      F_READ
+        jp      c,disk_error
+        ld      hl,(lf3+1)
+        or      a
+        sbc     hl,bc
+        jp      nz,disk_error
+        ld      hl,(rest_len)
+        ld      de,(rest_len+2)
+        call    bsdos
+        ld      (rest_len),hl
+        ld      (rest_len+2),de
+        call    li2             ; C=the NEXT read is the last chunk (common loop)
+lf3     ld      hl,#5555
+        ld      (portion_len),hl
+        ret
 
-lf1		ld	hl,(rest_len)	;substract disk_buf_len from rest_file first
-		ld	de,(rest_len+2)	;rest_len can be then used eg. for display copy progress
-		ld	bc,(disk_buf_len)
-		call	bsdos
-		ld	(rest_len+2),de
-		ld	(rest_len),hl
-		call	li2
-lf3		ld	hl,#5555
-		jr	li4
-
-;		call li2		;find out, if next portion< buffer
-;		ret c			;C=last part, no more substraction
 
 
-tapeout_open	ld hl,zxftpcl
-		ld de,tapeout_name
-;		ld bc,7
-		ld bc,8
-		ldir
-		ld b,3
-		jr tapeout
-tapeout_close	ld b,1
-tapeout		ld a,(DefaultDrive)
-		ld ix,tapeout_name
-		rst 8
-		db M_TAPEOUT
-		jp	c,disk_error
-		ret
-;tapeout_name	ds 7
-tapeout_name	ds 8
-		db ".tap",0	
 
 sub32		equ #B
 howsec		equ #F

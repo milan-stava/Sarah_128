@@ -46,13 +46,6 @@ WAIT2    halt
 
 otherkey	defb $55
 lastkey		defb $55
-keywait		ld b,20
-kw2		push bc
-		ld b,0
-kw1		djnz kw1
-		pop bc
-		djnz kw2
-		ret
 KEYSCAN
 return_key			;first press, returns NZ, next presses Z, no return if no key pressed
 

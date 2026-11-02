@@ -77,7 +77,13 @@ function cfgProfilesRegression(makeCpu,image,bios,S,bank6,sample) {
  assert(same(x.views[1].slice(0,6),x.before.slice(0,6)),'invalid preview leaves original columns');
  for(const text of ['', '; no profiles', 'Default=1\n;Name=ignored']){x=run(text,[]);assert(same(x.after,x.before),'no-profile CFG preserves settings');}
  x=run('',[],{missing:true});assert(same(x.after,x.before),'missing CFG preserves settings');
- const many=Array.from({length:260},(_,i)=>'Name=P'+i+'\nHost=h\nPort=1\nUser=\nPass=\nFile=\nStart=\n').join('');
+ let many='';
+ for(let i=0;i<260;i++){
+  const next='Name=P'+i+'\nHost=h\nPort=1\nUser=\nPass=\nFile=\nStart=\n';
+  if(many.length+next.length>S.cfg_capacity)break;
+  many+=next;
+ }
+ assert((many.match(/^Name=/gm)||[]).length>32,'stress CFG fits workspace and exceeds browser limit');
  x=run(many,[...Array(259).fill(10),13]);assert(x.after[6]==='P31','32-profile limit stops at P31 even with 260 records');
  assert(x.pages.length===1&&x.nameDraws.length===32&&x.scrolls===24,'initial eight names then only one new name per scroll, no full redraw');
  assert(x.screens.some(p=>p.top===1&&p.names[0]==='P1'&&p.names.at(-1)==='P8'),'ninth profile scrolls by one row');assert(x.screens.at(-1).top===24&&x.cursors.at(-1).row===7,'last profile stays at bottom');

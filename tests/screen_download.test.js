@@ -42,7 +42,7 @@ function screenDownloadRegression(makeCpu,image,bios,S) {
    if(pc===S.passive_receive_off){assert(closed&&cpu.rx.length===0,'drain FTP and AT before active receive');off=true;return {ret:true};}
    if(pc===S.akey1){assert(closed&&off&&received===size,'finish transfer before waiting on image');assert(!(r.m[S.flag1]&16),'image wait disables printing');keys++;return {ret:true};}
    if(pc===S.print_whole_screen||pc===S.get_status_ftp){assert(closed&&off&&pending===''&&r.m[S.ftp_control_left]===0,'PWD/status sees no stale 226');redrawn++;return {ret:true};}
-   if(pc===S.dir_move4)return {ret:true};
+   if(pc===S.dir_move4||pc===S.print_dir_menu)return {ret:true};
   }});
   cpu.m[S.flag1]=16;cpu.m[S.flag_dir]=1;cpu.m[0x5b00]=0xa5;
   put(cpu.m,S.cur_item_addr,0xc123);put(cpu.m,S.cur_item_addr_page,S.ftp_dir_page+1);

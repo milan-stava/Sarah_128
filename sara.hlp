@@ -22,10 +22,10 @@ SS+P        Toggle password visibility
 N           Select LIST / NLST for the next directory read
 SS+N        Select abbreviated / full listing
 W           Set Wi-Fi on/off when quitting Sarah
-V           Save the application with its settings
+V           Save the complete application with its settings
 Q           Quit; Wi-Fi state follows W
-G           Choose a CFG profile (BS-DOS)
-K           Read local sara.hlp (BS-DOS)
+G           Choose a local CFG profile
+K           Read local sara.hlp
 L           Start manual login; enter user and password
 SS+L (=)    Start automatic login using configured values
 CS+L        Not assigned in the main screen
@@ -54,6 +54,9 @@ X           Enter long-name scrolling (X right, Z left)
 
 LONG FILE NAMES
 ---------------
+Extensions of 1-3 characters stay in a fixed right column.
+X/Z scroll only the body; '..' means more text to the right.
+Longer extensions scroll with the entire original name.
 X           Start scrolling a name longer than the row
 X / Z       Scroll the name right / left
 Other key   Leave scrolling and perform that key's action
@@ -99,6 +102,8 @@ R           Read the directory again
 WITH A LOADED DIRECTORY
 -----------------------
 ENTER       Open directory or supported file under cursor
+ESXDOS      TAP/SNA/Z80/TRD/SCL launch after downloading
+            SNAPLOAD and VDISK commands must be installed
 BREAK       Go to the parent directory
 D           Download marked files, or the item under cursor
 6           Rename the item
@@ -113,7 +118,7 @@ DURING TRANSFERS
 B           Abort a running file download or upload
 BREAK       Interrupt directory reception
 
-CFG PROFILE SELECTION (BS-DOS)
+CFG PROFILE SELECTION
 -----------------------------
 G           Open the profile list
 Up / Down   Preview and select a profile
@@ -134,12 +139,12 @@ Upload is still under development.
 
 OPENING FILES (BS-DOS)
 ---------------------
-ENTER on TAP downloads, extracts and starts the program.
-The original TAP is currently kept after extraction.
+ENTER on TAP downloads and extracts the program.
+Delete and Run follow SS+T / CS+T settings above.
 ENTER on SNA / Z80 downloads and hands it to the NMI menu.
 An unsupported NMI menu shows a message and returns.
 ENTER also previews supported 6144/6912-byte screen files.
 Press a new key to leave the screen preview.
 
-Keep sara.hlp next to sara.cfg on the current BS-DOS disk.
+Keep sara.hlp next to sara.cfg on the current disk.
 Press K to open it, Left/Right to browse and BREAK to return.

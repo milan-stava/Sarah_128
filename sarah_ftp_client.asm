@@ -569,13 +569,11 @@ start_ldir	di
 		ld	hl,error_handler_loop	;HL= address, where error handler jumps after an error occurs
 		push	hl
 
-	IFDEF bs_dos
 		ld	a,program_page
 		call	PAGE128
 		call	load_cfg		;nahraj soubor CFG a prevezmi z nej Default 1 profil
 		xor	a
 		call	PAGE128			;pripni stranu 0 a pokracuj
-	ENDIF
 
 	IFDEF hgfx64x24
 	include	"hgfx.asm"
@@ -756,12 +754,10 @@ key_loop
 	ELSE
         call    KEYSCAN
 	ENDIF
-	IFDEF bs_dos
         cp      "g"
         call    z,cfg_choose_profile
         cp      "k"
         call    z,help_show
-	ENDIF
 		cp	"u"
 		call	z,ftp_upload_file
 		cp	"o"
@@ -891,7 +887,6 @@ kl8     call at_next_event
 kl9		xor	a			;A=0 to return to key_loop
 		jp	key_loop
 
-	IFDEF bs_dos
 ; Keep bank switching and directory redraw below #C000: printing an FTP
 ; directory can map another bank, so it cannot return into bank-6 code.
 cfg_choose_profile:
@@ -926,7 +921,6 @@ help_show:
         call    nz,resume_directory_screen.cached
         xor     a
         ret
-	ENDIF
 
 
 
@@ -1159,74 +1153,12 @@ prbloop		ld	(de),a
 
 ; --- DOKUMENTACE CZ: save_app ---
 ; Ucel: Uloží aplikaci včetně aktuálního nastavení.
-; Vstup: Aktuální program a save_app_head.
+; Vstup: Aktualni program a programova banka 6.
 ; Vystup: Uložený obraz aplikace; závěr obnovuje IX=flag1.
 ; Meni: AF, BC, DE, HL, IX; IY a alternativní registry dle ROM/DOS.
 ; Poznamka: Volá ROM ukládání; ESXDOS varianta využívá tapeout a mění systémové proměnné.
 ; --- KONEC DOKUMENTACE CZ ---
-save_app	
-;	IF bs_dos=0
-	IFNDEF bs_dos
-		call	tapeout_open
-       ld      hl,prikaz	;BASIC save according to Busy
-        ld      (#5C5D),hl
-	ld	iy,#5C3A
-	ld	(iy+#7C),#6F	;disable tape message+ key waiting
-	ld	(iy+#7E),#14
-	ei
-        xor     a
-        call      #60B
-
-	ENDIF
-
-;Pokial chces autostart iny ako riadok 10, tak namiesto 10 napis potrebne cislo. Pokial nechces autostart vobec, tak cely ten jeden riadok kde je 10 jednoducho zmaz.
-;Jaj, este som zabudol. Namiesto toho DS #10 mozes samozrejme dat akykolvek svoj kod. Tam ide len o to, aby nasledujuce kody CA,B0,.... boli vzdialene presne 16 bajtov od posledneho #0D za menom. Vyzaduje to tak romka.
-		xor	a
-		ld	de,17
-		ld	ix,save_app_head
-		ld	hl,total_len
-;		ld	hl,total_len+8
-		ld	(save_app_len),hl
-		push	hl
-		call	#4C2
-		pop	de		;DE=total_len+8
-		ld	a,#FF
-		ld	ix,start_address
-		call	#4C2
-;	IF bs_dos=0
-	IFNDEF bs_dos
-		call	tapeout_close
-	ENDIF
-sa1		jp	fdfm3		;set iX to flag1 and RET
-
-;	IF bs_dos=0
-	IFNDEF bs_dos
-prikaz  db      '"Meno"',#0D
-        ds      #10
-        db      #CA,#B0,'"10"'  ;; LINE VAL "10"
-        db      #0D
-	ENDIF
-
-
-/*old working, but long
-save_app	ld	hl,zxftpcl
-		ld	de,exp_name
-		ld	bc,10
-		ldir
-		ld	hl,0
-		ld	(blen+2),hl
-		ld	hl,total_len+8		;???? have to add 8 bytes to reach the same length as original, why?
-		ld	(blen),hl
-		ld	(flen),hl
-		ld	hl,start_address
-		ld	(sfh+1),hl
-		ld	(sif1+2),hl
-		call	save_file_head
-		call	save_into_file
-		ld	hl,basic_end
-		ld	(sif1+2),hl
-		jp	save_close
-*/
+        INCLUDE "save_app_io.asm"
 ;change URL
 ; --- DOKUMENTACE CZ: change_host ---
 ; Ucel: Načte novou adresu FTP serveru.
@@ -1430,10 +1362,13 @@ ful_abort_done
            call directory_retrieve
            jp initsp_keyloop      ;discard nested upload calls and temporary pushes
 ;subroutine, which sends to ftp server whole buffer blocks by blocks. Max length of block that ESP can send is #800:((
-ftp_send_loop	ld	hl,ftp_dir_start
+ftp_send_loop   ld      hl,(portion_len)
+        ld      a,h
+        or      l
+        ret     z               ; empty upload: close STOR without CIPSEND=0
+        push    hl
+		ld	hl,ftp_dir_start
 		ld	(ftp_upl_start),hl
-		ld	hl,(portion_len)	;send whole buffer, part by part
-		push	hl
 
 
 fsl1;		ld	bc,#400			;!!!!!IMPORTANT, we can put #800 here, and will send twice as much data in one go!!
@@ -2556,42 +2491,11 @@ fl3		call	clear_edit_zone
 ; which preserves AF/BC/DE/IX/IY exactly.
 ; -----------------------------------------------------------------------------
 
-; --- DOKUMENTACE CZ: DIR128_MAP_CURRENT ---
-; Ucel: Namapuje aktuální banku adresáře do #C000–#FFFF.
-; Vstup: fdp_pointer ukazuje do tabulky ftp_dir_page.
-; Vystup: NC = platná banka, C = sentinel #FF.
-; Meni: AF; BC, DE, HL, IX a IY zachovány.
-; Poznamka: Mění PAGE128_STATE a port #7FFD.
-; --- KONEC DOKUMENTACE CZ ---
-DIR128_MAP_CURRENT:
-        push    hl
-        push    de
-        ld      de,(fdp_pointer)
-        ld      a,(de)
-        cp      #FF
-        jr      z,DIR128_MAP_BAD
-        call    PAGE128
-        pop     de
-        pop     hl
-        or      a                       ;NC = valid page
-        ret
-DIR128_MAP_BAD:
-        pop     de
-        pop     hl
-        scf
-        ret
 
-;Select first FTP directory page (page 0).
-; --- DOKUMENTACE CZ: DIR128_FIRST_PAGE ---
-; Ucel: Vybere první banku adresáře (RAM 0).
-; Vstup: Bez parametrů.
-; Vystup: fdp_pointer = ftp_dir_page+1; NC.
-; Meni: AF; BC, DE, HL, IX a IY zachovány.
-; Poznamka: Mění mapování RAM a PAGE128_STATE.
-; --- KONEC DOKUMENTACE CZ ---
+; Select first FTP directory page (page 0); preserve caller's pointer.
 DIR128_FIRST_PAGE:
         push    hl
-        ld      hl,ftp_dir_page+1       ;first real entry = page 0
+        ld      hl,ftp_dir_page+1
         ld      (fdp_pointer),hl
         ld      a,(hl)
         call    PAGE128
@@ -3629,9 +3533,7 @@ drgd1       ld b,128
             jp dr_end_ok
 dr6		call	print_working_directory
 		call	print_dir_files_items	;prints number of items/dirs/files
-		ld	de,menu_dir
-		ld	hl,txt_adr_dir_info+22
-		call	PRINTHL
+		call	print_dir_menu
 ;		ld	hl,ftp_path		;toto asi netøeba se piplat s pointerem
 ;		ld	(ftp_path_pointr),hl	;after dir reading, set path to its very start
 		set	0,(ix+1)		;indicate that dir has been retrieved
@@ -3901,9 +3803,7 @@ download_screen_restore
 
 		call	print_whole_screen
 		call	print_dir_files_items
-		ld	de,menu_dir
-		ld	hl,txt_adr_dir_info+22
-		call	PRINTHL
+		call	print_dir_menu
 		call	print_ftp_status
 		call	get_status_ftp
 		jp	dir_move4		;start dir from where you ended
@@ -3963,9 +3863,13 @@ enter_directory
 
 ;tady rozhodujeme, pokud je soubor po kurzorem TAPka, snap, TXT, POK, atd....
 		ld	a,(ix+item_extension-flag1)
-		IFDEF bs_dos
 		cp  3				;0=TAP, 1=Z80, 2=SNA
 		jp 	c,enter_tap		;spolecny vstup pro TAP a SNA
+		IFNDEF bs_dos
+        cp      5               ; ESXDOS also mounts TRD and SCL after download
+        jp      z,enter_tap
+        cp      6
+        jp      z,enter_tap
 		ENDIF
 		cp	7
 		jp  z,view_as_text.ready	;7=TXT, TYPE I already sent
@@ -4067,7 +3971,6 @@ ed4_read
 
 ;tady budeme odchytavat typy souboru, ktere chceme pri stisku enteru zpracovat, kdyz na nich stoji kurzor
 ;A=0, je to TAP, jdeme ji zpracovat
-        IFDEF bs_dos
 enter_tap	
 enter_snap	call 	ftp_download_file_under_cursor
 			ret		nz		; chyba/preruseni: nepokracovat
@@ -4079,10 +3982,15 @@ enter_snap	call 	ftp_download_file_under_cursor
 			call	PAGE128
 
 			ld	a,(ix+item_extension-flag1)		;A=extension
+        IFDEF bs_dos
 			or	a
 			jp	z,work_tap		;skok na rozbaleni a spusteni TAPky
 			jp	work_snap		;A=1 Z80, 2=SNA- nahravame snapy
+        ELSE
+        jp      esx_launch_bank
+        ENDIF
 
+        IFDEF bs_dos
 snap_not_found
 			ld	a,#40
 			out	(23),a			
@@ -4122,6 +4030,9 @@ tap_options_keyboard
 
         ENDIF
 
+        IFNDEF bs_dos
+        INCLUDE "esxdos_launch_io.asm"
+        ENDIF
         INCLUDE "text_viewer_io.asm"
 
 
@@ -4840,6 +4751,22 @@ dir_display_read
         jr      nc,.copy
 dir_display_bank
         ld      a,program_page
+        jp      PAGE128
+
+; A=0 full keyboard menu, A=1 directory hints. Keep text in bank 6.
+print_menu:
+        ld      c,0
+        jr      menu_bank_call
+print_dir_menu:
+        ld      c,1
+menu_bank_call:
+        ld      a,(PAGE128_STATE)
+        push    af
+        ld      a,program_page
+        call    PAGE128
+        ld      a,c
+        call    print_menu_bank
+        pop     af
         jp      PAGE128
 
 ;marking item=bit 0 in item attr byte
@@ -7428,7 +7355,6 @@ rfa2    call ftp_active_reply
 ; Vystup: Vybraný buffer je nulový; BC=0, HL/DE na konci kopírování.
 ; Meni: F, BC, DE, HL; A, IX a IY zachovány.
 ; --- KONEC DOKUMENTACE CZ ---
-clear_buffers	ld	bc,buffers_len-1
 cb2		ld	hl,RX_buf
 		ld	de,RX_buf+1
 cb1		ld	(hl),0
@@ -7442,16 +7368,6 @@ cb1		ld	(hl),0
 ; --- KONEC DOKUMENTACE CZ ---
 clear_RX_buf	ld	bc,buffers_len/2-1
 		jr	cb2			
-; --- DOKUMENTACE CZ: clear_TX_buf ---
-; Ucel: Vynuluje oba komunikační buffery, resp. pouze RX nebo TX.
-; Vstup: Bez parametrů.
-; Vystup: Vybraný buffer je nulový; BC=0, HL/DE na konci kopírování.
-; Meni: F, BC, DE, HL; A, IX a IY zachovány.
-; --- KONEC DOKUMENTACE CZ ---
-clear_TX_buf	ld	hl,TX_buf
-		ld	de,TX_buf+1
-		ld	bc,buffers_len/2-1
-		jr	cb1
 
 ;error handling: (Busy's solution)
 ;main routine 	ld 	sp,stack
@@ -9377,12 +9293,7 @@ print_start_screen
         call print_screen_layout
         jp print_title
 print_screen_layout
-		ld	de,menu1
-		ld	hl,txt_adr_menu1
-		call	PRINTHL			;print menu line 1
-		ld	de,menu2
-		ld	hl,txt_adr_menu2
-		call	PRINTHL			;print menu line 2
+		call	print_menu
 
 		call	prn_w_onoff		;print if WIFI should be ON/OFF on quit
 		call	prn_alogin		;print autologin status
@@ -9434,9 +9345,7 @@ resume_directory_screen
         call print_working_directory
 .cached                         ; redraw without FTP, also usable by local help
         call print_dir_files_items
-        ld de,menu_dir
-        ld hl,txt_adr_dir_info+22
-        call PRINTHL
+        call print_dir_menu
         jp dir_move4
 	IFDEF hgfx64x24
 ;95) set_fdma_to_chars	
@@ -9505,7 +9414,11 @@ var_user	db "sarah",0			;variable user-user can change
 var_pasw	db "zxftpc",0			;variable password-user can change
 		ds 31				;reserve
 
-cfg_name	db "sara.cfg  "		;configuration file name
+        IFDEF bs_dos
+cfg_name db "sara.cfg  "
+        ELSE
+cfg_name db "sara.cfg",0
+        ENDIF
 
 current_host	ds 64				;current host we are logged in
 current_login	ds 3				;contains either "X" or "OK", both followed by 0
@@ -9612,17 +9525,7 @@ speed		db "Speed:",0
 module_no_aswer	db "..speed aligned, but no answer from module..",0
 spaces		db "                                ",0
 
-menu_dir	db "I-F Sp ZX R-R 6-Rn 7-MD Del Br-U ssN Z-Txt",0
-menu_dir_len equ $-menu_dir-1
-        ASSERT menu_dir_len <= 64-22
-	IFDEF bs_dos
-menu1		db "F-file T-start A-YES H-host E-usr P-pw U-up S-sz Q-q G-CFG K-Hlp",0
-	ELSE
-menu1		db "F-file T-start A-YES H-host E-usr ss+/P-pass U-upl S-size Q-quit",0
-	ENDIF
-;menu1		db "S-size Q-quit F-file T-start A-YES H-host R-user P-pass U-upld",0
-;menu2		db "W-wifi OFF ss+/L-auto/login O-logoff V-save app ss+/D-dwnld/file",0
-menu2		db "W-wifi OFF ss+/L-login O-logoff V-savApp Cs/ss+/D-dwnld C-com",0
+; Keyboard menu text lives in program bank 6.
 file		db "File: ",0
 start		db "  Start: ",0
 user		db "  User: ",0
@@ -9676,12 +9579,6 @@ logged_in	db "Logged in: ",0
 host		db "Host: ",0
 transfer	db "Transfer aborted",0
 incomplete	db "incomplete",0
-save_app_head	db 3			;17 bytes header for application save
-zxftpcl		db "SAR12SAV  "
-;zxftpcl		db "ZXFtp_cl"		;8chars for esxdos name
-;ver		db "09"
-save_app_len	dw #5555
-save_app_start	dw start_address,0
 
 akey_txt	db " ..press a key..",0
 yesno		db " Yes/No?",0
@@ -9918,11 +9815,12 @@ total_len	equ $-start_ldir
 program_page_start:
         INCLUDE "find_input_bank.asm"
         INCLUDE "directory_display_bank.asm"
-        IFDEF bs_dos
-        INCLUDE "2nd_program_bank.asm"
-        ELSE
-        INCLUDE "text_viewer_bank.asm"
+        INCLUDE "save_app_bank.asm"
+        INCLUDE "menu_bank.asm"
+        IFNDEF bs_dos
+        INCLUDE "esxdos_launch_bank.asm"
         ENDIF
+        INCLUDE "2nd_program_bank.asm"
 program_page_end:
 program_page_len equ program_page_end-program_page_start
         PAGE 0

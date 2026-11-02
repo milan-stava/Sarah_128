@@ -55,7 +55,7 @@ function uploadWaitRegression(makeCpu,image,bios,S) {
   assert(!r.z&&r.bc===12&&r.hl===0x5004&&u.sent.length===4,'stuck UART never reports a partial block as complete');
  }
  // BS-DOS multi-bank loop through normal CIPCLOSE/226 and directory refresh.
- if(S.cfg_read_file!==undefined)for(const total of [32768,307201])for(const early226 of [false,true]) {
+ if(S.work_tap!==undefined)for(const total of [32768,307201])for(const early226 of [false,true]) {
   let u,loaded=0,sent=0,portionStart=0,closed=false,refreshed=false,command='',blocks=0,speed=7,delayedAck=0,pausedReads=0,guardLoops=0;
   const str=(m,p)=>{let s='';while(m[p])s+=String.fromCharCode(m[p++]);return s;};
   const put=(m,p,v)=>{m[p]=v&255;m[p+1]=v>>8;};

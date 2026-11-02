@@ -42,7 +42,8 @@ function cfgRegression(makeCpu,image,bios,S,bank6,sample) {
  const limits=run(profile({Name:'n'.repeat(31),Host:'h'.repeat(45),User:'u'.repeat(31),Pass:'p'.repeat(31),File:'f'.repeat(56),Start:'65535',Port:'65535'}));
  assert(!limits.r.carry,'maximum field lengths fit');assert(str(limits.u.m,S.var_user)==='u'.repeat(31),'Host terminator does not damage User');
  for(const text of [profile(),profile({File:'name=with=equals',Pass:'a=b;c'})]){const x=run(text);assert(!x.r.carry,'equals inside values');}
- const sizes=[0,1,...Array.from({length:15},(_,i)=>[1024*(i+1)-1,1024*(i+1),1024*(i+1)+1]).flat(),S.cfg_capacity,S.cfg_capacity+1,65536,65537,0xffffffff];
+ // Native ESXDOS file handling is exercised by esxdos_local_io.test.js.
+ const sizes=S.work_tap==null?[]:[0,1,...Array.from({length:15},(_,i)=>[1024*(i+1)-1,1024*(i+1),1024*(i+1)+1]).flat(),S.cfg_capacity,S.cfg_capacity+1,65536,65537,0xffffffff];
  for(const len of sizes)for(const failure of ['none',...(len===1025?['missing','header','load']:[])]) {
   let loads=0,services=[],diskError=false;const text=profile(),stop={};let u;
   u=make((pc,r)=>{

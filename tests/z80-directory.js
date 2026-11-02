@@ -17,7 +17,9 @@ function makeCpu(code, bios, S, options={}) {
  switch(op){
  case 0x31:{const sp=word();stack.length=(0xf000-sp)/2;break;}
  case 0xe7:stack.push(pc);pc=0x20;break; // RST #20 (BS-DOS service)
+ case 0xcf:stack.push(pc);pc=0x08;break; // RST #08 (ESXDOS service byte)
  case 0x00:break;
+ case 0xf3:case 0xfb:break; // DI/EI: interrupt delivery is outside this model
  case 0x2f:a^=255;break;
  case 0x07:cf=!!(a&128);a=((a<<1)|(a>>7))&255;break; // RLCA keeps Z
  case 0xd3:{const port=(a<<8)|m[pc++];if(!options.onOut)throw Error('Unexpected OUT '+port.toString(16));options.onOut(port,a);break;}
