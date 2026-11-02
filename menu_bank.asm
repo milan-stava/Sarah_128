@@ -1,6 +1,12 @@
 ; All main-screen shortcuts, including local G/K on both DOS variants.
 ; Dynamic A/W status offsets remain compatible with the existing printers.
 print_menu_bank:
+        cp      2
+        jp      z,item_position_bank
+        cp      3
+        jp      z,item_position_reset_bank
+        cp      4
+        jp      z,jump_item_bank
         or      a
         jr      nz,.directory
         ld      hl,txt_adr_menu1
@@ -20,7 +26,7 @@ menu1 db "F-file T-start A-YES H-host E-usr P-pw U-up S-sz Q-q G-CFG K-Hlp",0
         ASSERT $-menu1-1 <= line_length
 menu2 db "W-wifi OFF L/ssL-login O-off V-save D-down C-cmd R-read Z-Txt",0
         ASSERT $-menu2-1 <= line_length
-menu3 db "ssP-show CS/ssD-file N/ssN-list CS/ssM-mark Arrows-move/page",0
+menu3 db "ssP-show CS/ssD-file N/ssN-list CS/ssM-mark Arrows-nav J-jump",0
         ASSERT $-menu3-1 <= line_length
 menu_dir db "I-find Sp-M ZX-roll 6-Rn 7-MD Del Br-U Ent",0
 menu_dir_len equ $-menu_dir-1

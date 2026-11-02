@@ -834,6 +834,8 @@ kl2		call	z,ftp_login
 		call	z,unmark_all		;SS+M=unmark all
 		cp	"i"
 		jp	z,find_items
+		cp      "j"
+		call    z,jump_to_item
 		cp	"z"
 		call	z,view_as_text
 
@@ -2934,6 +2936,7 @@ search_by_Busy_dir_slow:
 directory_retrieve
         call ftp_ready
         ret z
+        call reset_item_position ; replacement invalidates the cached item pointers
 				;retrieve directory list
 		xor a
 		ld (dr_reply_pending),a
@@ -4759,6 +4762,24 @@ print_menu:
         jr      menu_bank_call
 print_dir_menu:
         ld      c,1
+        jr      menu_bank_call
+print_item_position:
+        ld      c,2
+        jr      menu_bank_call
+reset_item_position:
+        ld      c,3
+        jr      menu_bank_call
+jump_to_item:
+        bit     0,(ix+1)
+        ret     z
+        ld      c,4
+        call    menu_bank_call
+        ld      a,b
+        or      c
+        ret     z
+        ld      a,1
+        ld      (wind_curs_item),a
+        jp      restore_dir_view
 menu_bank_call:
         ld      a,(PAGE128_STATE)
         push    af
@@ -4768,6 +4789,21 @@ menu_bank_call:
         call    print_menu_bank
         pop     af
         jp      PAGE128
+
+; C=forward, NC=backward. Pointer workspace is fixed RAM while banks change.
+; OUT Z=boundary, NZ=moved; always return to the calling bank-6 routine.
+item_position_step:
+        ld      bc,dir_search_addr
+        ld      de,dir_search_page
+        jr      nc,.back
+        call    item_add
+        jr      .return
+.back   call    item_sub
+.return push    af
+        ld      a,program_page
+        call    PAGE128
+        pop     af
+        ret
 
 ;marking item=bit 0 in item attr byte
 ; --- DOKUMENTACE CZ: mark_item ---
@@ -4975,7 +5011,8 @@ undraw_cursor	bit 0,(ix+1)
 ; Meni: AF, BC, DE, HL; další změny dle volaných tiskových/klávesnicových služeb.
 ; Poznamka: HGFX používá FDMA a poté obnoví parametry pro tisk znaků.
 ; --- KONEC DOKUMENTACE CZ ---
-draw_cursor	call	DIR128_CUR_ATTR_HL
+draw_cursor	call    print_item_position
+        call	DIR128_CUR_ATTR_HL
 	IFDEF hgfx64x24
 		ld	bc,mark_cursor
 	ELSE
@@ -5301,8 +5338,13 @@ prn_file_start
 		ld	a,h
 		ld	(de),a			;nuluj posledni pozici tisku
 		pop	de
-pfs1		call	PRINT
+		call	PRINT
+		call    print_item_position
 		jp	clear_edit_zone
+
+; Password rendering also uses this original PRINT/clear tail and pfs1+3.
+pfs1    call    PRINT
+        jp      clear_edit_zone
 
 ; --- DOKUMENTACE CZ: set_user ---
 ; Ucel: Načte uživatelské jméno, resp. heslo FTP.
@@ -9704,7 +9746,7 @@ cur_lin_prn_adr	dw #5555	;;;;;ix+27, current addres for line/item print
 item_file_count	dw #5555	;ix+29, item (for NLST)/ file (for LIST) counter (IY will count files/ items)
 mark_counter	dw #5555	;ix+31, counts marked files
 dir_counter	dw #5555	;IX+33
-item_counter	dw #5555	;IX+35, counts items in the directory view (files+dirs)
+item_counter	dw 0	;IX+35, 1-based selected item, including '..'; 0=no listing
 dir_restore_item dw 0
 dir_restore_row db 1
 dir_list_pointer dw dir_list_start
@@ -9817,6 +9859,7 @@ program_page_start:
         INCLUDE "directory_display_bank.asm"
         INCLUDE "save_app_bank.asm"
         INCLUDE "menu_bank.asm"
+        INCLUDE "item_position_bank.asm"
         IFNDEF bs_dos
         INCLUDE "esxdos_launch_bank.asm"
         ENDIF

@@ -16,7 +16,7 @@ function menuRegression(makeCpu,image,bios,S,bank6) {
    assert(draws.length===3&&draws.map(x=>x.at).join(',')===[S.txt_adr_menu1,S.txt_adr_menu2,S.txt_adr_meziradek].join(','),'three menu rows in the intended positions');
    assert(draws[0].text.slice(17,20)==='YES'&&draws[1].text.slice(7,10)==='OFF','dynamic autologin/Wi-Fi columns retained');
    const text=draws.map(x=>x.text).join(' ');
-   for(const key of ['F-','T-','A-','H-','E-','P-','U-','S-','Q-','G-','K-','W-','L/ssL','O-','V-','D-','C-','R-','Z-','ssP-','CS/ssD-','N/ssN-','CS/ssM-','Arrows-'])assert(text.includes(key),'main shortcut '+key);
+   for(const key of ['F-','T-','A-','H-','E-','P-','U-','S-','Q-','G-','K-','W-','L/ssL','O-','V-','D-','C-','R-','Z-','ssP-','CS/ssD-','N/ssN-','CS/ssM-','Arrows-','J-'])assert(text.includes(key),'main shortcut '+key);
   }
  }
  return {checks};

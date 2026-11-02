@@ -1,6 +1,6 @@
 function makeCpu(code, bios, S, options={}) {
  const m=new Uint8Array(65536);if(options.image)m.set(options.image,0x6000);m.set(bios,0xe000);
- let a=0,b=0,c=0,d=0,e=0,h=0,l=0,ix=S.flag1,z=false,cf=false,pc=0,stack=[],steps=0;
+ let a=0,b=0,c=0,d=0,e=0,h=0,l=0,ix=S.flag1,z=false,cf=false,pv=false,pc=0,stack=[],steps=0;
  let rx=[], sent=[], rxReads=0, polls=0, paceIterations=0, txBusy=options.txBusy||0, lastStatus=0;
  const hl=()=>h*256+l,de=()=>d*256+e,bc=()=>b*256+c;
  let alt=[0,0,0,0,0,0],aa=0,az=false,ac=false,iy=0;
@@ -49,6 +49,7 @@ function makeCpu(code, bios, S, options={}) {
  case 0xc3:{let addr=word();pc=addr===S.rece_byte?0xe0d7:addr;break;}
  case 0xca:{let addr=word();if(z)pc=addr;break;}
  case 0xc2:{let addr=word();if(!z)pc=addr;break;}
+ case 0xea:case 0xe2:{const addr=word();if(op===0xea?pv:!pv)pc=addr;break;}
  case 0xda:{let addr=word();if(cf)pc=addr;break;}
  case 0xf5:stack.push((a<<8)|(z?64:0)|(cf?1:0));break;
  case 0xf1:{let n=stack.pop();a=n>>8;z=!!(n&64);cf=!!(n&1);break;}
@@ -78,7 +79,7 @@ function makeCpu(code, bios, S, options={}) {
  case 0x0c:c=(c+1)&255;z=c===0;break;case 0x04:b=(b+1)&255;z=b===0;break;case 0x3c:a=(a+1)&255;z=a===0;break;
  case 0x0f:cf=!!(a&1);a=(a>>1)|(cf?128:0);break;
  case 0x1f:{const old=cf;cf=!!(a&1);a=(a>>1)|(old?128:0);break;}
- case 0xcb:{const op2=m[pc++];if(op2>=0x08&&op2<=0x0f){const v=get(op2&7);cf=!!(v&1);const result=(v>>1)|(cf?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x18&&op2<=0x1f){const v=get(op2&7),old=cf;cf=!!(v&1);const result=(v>>1)|(old?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x38&&op2<=0x3f){const v=get(op2&7);cf=!!(v&1);put(op2&7,v>>1);z=(v>>1)===0;}else if(op2===0x79)z=!(c&128);else if(op2===0x47)z=!(a&1);else if(op2>=0x40&&op2<=0x7f)z=!(get(op2&7)&(1<<((op2>>3)&7)));else if(op2>=0x80){const mask=1<<((op2>>3)&7);put(op2&7,op2>=0xc0?get(op2&7)|mask:get(op2&7)&~mask);}else throw Error("CB "+op2);break;}
+ case 0xcb:{const op2=m[pc++];if(op2>=0x08&&op2<=0x0f){const v=get(op2&7);cf=!!(v&1);const result=(v>>1)|(cf?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x10&&op2<=0x17){const v=get(op2&7),old=cf;cf=!!(v&128);const result=((v<<1)|(old?1:0))&255;put(op2&7,result);z=result===0;}else if(op2>=0x18&&op2<=0x1f){const v=get(op2&7),old=cf;cf=!!(v&1);const result=(v>>1)|(old?128:0);put(op2&7,result);z=result===0;}else if(op2>=0x38&&op2<=0x3f){const v=get(op2&7);cf=!!(v&1);put(op2&7,v>>1);z=(v>>1)===0;}else if(op2===0x79)z=!(c&128);else if(op2===0x47)z=!(a&1);else if(op2>=0x40&&op2<=0x7f)z=!(get(op2&7)&(1<<((op2>>3)&7)));else if(op2>=0x80){const mask=1<<((op2>>3)&7);put(op2&7,op2>=0xc0?get(op2&7)|mask:get(op2&7)&~mask);}else throw Error("CB "+op2);break;}
  case 0xdd:{const op2=m[pc++];if(op2===0x21){ix=word();break;}if(op2===0xe5){stack.push(ix);break;}if(op2===0xe1){ix=stack.pop();break;}if(op2===0x61){ix=(ix&255)|(c<<8);break;}if(op2===0x44){b=ix>>8;break;}if(op2===0xbc){cp(ix>>8);break;}if(op2===0x19){const n=ix+de();cf=n>65535;ix=n&65535;break;}const disp=m[pc++];const addr=(ix+(disp<128?disp:disp-256))&65535;if([0x46,0x4e,0x56,0x5e,0x66,0x6e,0x7e].includes(op2)){put((op2>>3)&7,m[addr]);break;}if(op2===0xae){a^=m[addr];logic();break;}if(op2===0x77){m[addr]=a;break;}if(op2===0x36){m[addr]=m[pc++];break;}if(op2===0x34||op2===0x35){m[addr]=(m[addr]+(op2===0x34?1:-1))&255;z=m[addr]===0;break;}if(op2===0xbe){cp(m[addr]);break;}if(op2!==0xcb)throw Error('DD '+op2);const bitop=m[pc++],mask=1<<((bitop>>3)&7);if(bitop<0x80){z=!(m[addr]&mask);}else if(bitop<0xc0){m[addr]&=255^mask;}else{m[addr]|=mask;}break;}
  case 0xed:{
  const o=m[pc++];const port=bc();
@@ -93,6 +94,7 @@ function makeCpu(code, bios, S, options={}) {
  else if(o===0x52){let n=hl()-de()-(cf?1:0);cf=n<0;n&=65535;h=n>>8;l=n&255;z=n===0;}
  else if(o===0x53){let addr=word();m[addr]=e;m[addr+1]=d;}
  else if(o===0x5b){let addr=word();e=m[addr];d=m[addr+1];}
+ else if(o===0xa1){const value=m[hl()];let src=(hl()+1)&65535,count=(bc()-1)&65535;z=a===value;pv=count!==0;h=src>>8;l=src&255;b=count>>8;c=count&255;}
  else if(o===0xa0){m[de()]=m[hl()];let src=(hl()+1)&65535,dst=(de()+1)&65535,count=(bc()-1)&65535;h=src>>8;l=src&255;d=dst>>8;e=dst&255;b=count>>8;c=count&255;}
  else if(o===0xb0||o===0xb8){let count=bc(),src=hl(),dst=de(),dir=o===0xb0?1:-1;for(let i=0;i<count;i++)m[(dst+dir*i)&65535]=m[(src+dir*i)&65535];src=(src+dir*count)&65535;dst=(dst+dir*count)&65535;h=src>>8;l=src&255;d=dst>>8;e=dst&255;b=c=0;}
  else throw Error("ED "+o.toString(16));break;}

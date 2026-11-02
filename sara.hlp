@@ -50,6 +50,9 @@ CS+M        Mark all real items (except the parent '..')
 SS+M (.)    Unmark all items
 I           Find text in names and mark matching items
             Searching replaces the previous marks
+J           Jump to item number (1-65535), BREAK cancels
+            Invalid or out-of-range numbers leave the cursor
+            Current number appears at the right of File/Start
 X           Enter long-name scrolling (X right, Z left)
 
 LONG FILE NAMES

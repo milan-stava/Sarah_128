@@ -13,7 +13,7 @@ function actionGuardsRegression(makeCpu,image,bios,S) {
  };
  const effects=['print_ez1','clear_inp_buf','send_type_command_i','send_type_command_a',
   'send_ftp_command','send_string','input_line','get_item_name','DIR128_CUR_ATTR_HL',
-  'cls_9','save_dir_position_snapshot','passive_receive_off','print_transfer_status'];
+  'cls_9','reset_item_position','save_dir_position_snapshot','passive_receive_off','print_transfer_status'];
  for(const [entry,kind] of Object.entries(entries))for(const login of [false,true])for(const directory of [false,true])for(const closed of [0,1,2,3])for(const status of [51,52]) {
   const allowed=!(closed&1)&&(kind==='control'?status===51:login&&(kind!=='item'||directory));
   let reached=false;const cpu=makeCpu([],bios,S,{image,hook(pc){
@@ -48,7 +48,7 @@ function actionGuardsRegression(makeCpu,image,bios,S) {
   assert(scans===2,'offline key safely ignored '+key);
  }
  // New-directory dispatch is available before LIST; memory actions remain offline.
- for(const [key,target] of [[55,'create_dir'],[11,'key_up'],[10,'key_down'],[32,'mark_item'],[77,'mark_all'],[46,'unmark_all'],[105,'find_items'],[120,'roll_item']]) {
+ for(const [key,target] of [[55,'create_dir'],[11,'key_up'],[10,'key_down'],[32,'mark_item'],[77,'mark_all'],[46,'unmark_all'],[105,'find_items'],[106,'jump_to_item'],[120,'roll_item']]) {
   let reached=false;const cpu=makeCpu([],bios,S,{image,hook(pc){
    if(pc===S.KEYSCAN||pc===S.tap_options_keyboard)return {ret:true,a:key};
    if(pc===S[target]){reached=true;throw stop;}

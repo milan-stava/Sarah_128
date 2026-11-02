@@ -1,3 +1,73 @@
+## 2. 11. 2026: commit/push cislovani a J na zadost uzivatele
+
+Uzivatel zadal commit a push soucasneho stavu na fix-ftp-directory.
+Popis: Add directory item position display and jump by number.
+Zahrnuty zdroje, menu/help, testy, audit, TAP/LST/SYM a vsech8 cekajicich
+HW bodu. Vysledek overit git log/status a shodou HEAD s origin vetvi.
+Zadny z cekajicich HW bodu zatim uzivatel neoveril.
+
+Budouci ZX Next port: uzivatel uz ma vlastni Wi-Fi BIOS pro Next a doda ho.
+Az ho doda, porovnat API/flags/baud/CPU ovladani se stavajicim BIOSem;
+zatim zadne upravy pro Next nedelany, nepovazovat podobny UART za HW test.
+
+## 2. 11. 2026: poradove cislo kurzoru a skok J hotovy, HW CEKA
+
+Na zadost uzivatele doplnen 1-based item_counter (stale IX+35), vcetne '..',
+vpravo5 sloupcu radku File/Start. Bez adresare0. Banka6 drzi posledni
+potvrzenou pozici a dopocte jen rozdil; kurzor/sipky/page/FIND/navraty
+aktualizuji pole pres draw_cursor, zmena File/Start pres prn_file_start.
+Docasne pruchody tiskem/oznacovanim pocitadlo nerozhodi. Novy listing resetuje
+cache. Hlavni logika v item_position_bank.asm, dole jen paging/step mosty.
+
+Uzivatel dodatecne schvalil J-jump. J v menu i helpu; pracuje nad cached
+adresarem i offline. Editor max5 znaku, sdileny cfg_decimal kontroluje cisla
+a preteceni. Zruseni/prazdny/nula/necislo/nadpocet NIC nezmeni (posledni
+upresneni uzivatele: NE skok na posledni). Platna polozka se ukaze nahore
+stejne jako FIND pres existujici restore_dir_view. Bez noveho FTP dotazu.
+
+Proti commitu f50f154 pro OBA DOSy: cislo +47B podC000/+194B banka6,
+J navic +28B/+89B; CELKEM +75B podC000/+283B banka6.
+Volno doBFE0 BSD6205B, ESX6090B; banka6 celkem BSD4339B, ESX3341B.
+Oba preklady0 chyb/varovani. 61 starych regresi1107164 PASS; nove2 behy
+po33685 PASS (3580 navigacnich kroku kazdy, 1000 polozek pres4 banky,
+skutecny FIND a paginace, J LIST/NLST, neplatne vstupy); TAP handoff1071 PASS.
+Podrobnosti tests/item-position-audit.md. Jeste zadne HW overeni tohoto kroku.
+TAPy v projektu aktualni, HGFX vypnut; zadny novy commit/push ani FTP kopie.
+
+Dalsi HW bod8: cislo pri sipkach/pages/FIND/CDUP/refresh/oznacovani/navratu
+z TXT/screenu/helpu/CFG; J prvni/stred/posledni/presbanky a neplatne cislo,
+nadpocet/overflow/BREAK; bez cached adresare J ignorovano. PUVODNICH7 bodu
+nize zustava vsech NEOVERENO. Posledni commit/push stale f50f154.
+
+## 2. 11. 2026: sedm cekajicich HW testu - NEPOVAZOVAT ZA OVERENE
+
+Uzivatel ted nema moznost realne HW testovat a chce prejit na dalsi praci.
+Nasledujicich 7 bodu zachovat pro pristi HW testovani. Odlozeni neni uspech.
+Zaklad pro test: commit f50f154b650f6abd0ca5b1baa7384e165aabe3cb, uspesne
+pushnuty na origin/fix-ftp-directory. BSD: SARA_LOADER.tap;
+ESX: SARA_ESX_LOADER.tap. Automaticke modelove testy viz nizsi checkpoint.
+
+1. Pripony/rolovani na obou DOSech: 1-3 znaky pevne zarovnane vpravo,
+   dlouhy nazev X/Z roluje jen telo a ponecha priponu, delsi pripona roluje
+   cele jmeno; adresar s teckou a soubor bez pripony.
+2. BSD TAP: SS+T Delete a CS+T Run, vsechny4 kombinace; default Y/Y.
+   Run=N vrati Saru a funkcni adresar; Delete maze jen puvodni TAP.
+3. ESX ENTER TAP/SNA/Z80/TRD/SCL; SNAPLOAD a VDISK dle instalace;
+   chyby se vraci bez zamrznuti; TAP se nemaze.
+4. Lokalni G/K hlavne ESX: CFG vyber, ENTER login, BREAK obnova profilu;
+   sara.hlp listovani vlevo/vpravo, BREAK navrat a funkcni kurzor/adresar.
+5. Save V oba DOSy: zmenit nastaveni, ulozit a znovu nacist kompletni
+   aplikaci vcetne banky6; overit nastaveni, G/K, text viewer; ESX vytvari
+   SAR12SAV.tap. Overit i preruseni ukladani a bezpecny navrat.
+6. ESX upload/download: maly, presne16384B, vicebankovy a pokud mozno
+   prazdny soubor; shoda obsahu a funkcnost po prenosu. Drivejsi zakladni
+   HW upload testy zustavaji platne, novy diskovy kod jeste neoveren na HW.
+7. Menu oba DOSy: vsechny radky citelne bez prekryvu, dynamicke A/W stavy
+   a BSD TAP volby na spravnych mistech.
+
+Vsech7 bodu CEKA na HW. Dalsi prace nesmi tento seznam ztratit ani zmenit
+stav na hotovo bez vysledku od uzivatele. Dalsi ukol zatim nebyl upresnen.
+
 ## 2. 11. 2026: uzivatel zadal commit a push celeho ESXDOS kroku
 
 Commit zahrnuje ESX TAP/SNA/Z80/TRD/SCL loadery, nativni diskove opravy,
